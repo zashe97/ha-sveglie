@@ -1,0 +1,69 @@
+# Crea la release vX.Y.Z quando una PR viene unita su main.
+# Main si aggiorna solo con una PR unita dal proprietario (regola del repository),
+# quindi questa Action parte solo per una sua azione. Niente Action di terzi: solo `gh`.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # serve solo per creare tag e release
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+    steps:
+      - name: Versione da manifest.json
+        id: v
+        run: |
+          versione=$(gh api "repos/$REPO/contents/custom_components/sveglie/manifest.json?ref=$SHA" \
+            --jq '.content' | base64 -d | jq -r '.version')
+          if ! [[ "$versione" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Versione non valida in manifest.json: '$versione'"; exit 1
+          fi
+          echo "tag=v$versione" >> "$GITHUB_OUTPUT"
+
+      - name: Controlla se la versione esiste già
+        id: c
+        run: |
+          tag="${{ steps.v.outputs.tag }}"
+          if ! gh api "repos/$REPO/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "nuova=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # stessa versione: va bene solo se l'integrazione non è cambiata (README, Action...)
+          cambiati=$(gh api "repos/$REPO/compare/$tag...$SHA" \
+            --jq '[.files[]?.filename | select(startswith("custom_components/"))] | length')
+          if [ "$cambiati" != "0" ]; then
+            echo "::error::L'integrazione è cambiata ma $tag esiste già: alza la versione in manifest.json"
+            exit 1
+          fi
+          echo "::notice::Nessuna modifica all'integrazione: nessuna nuova release"
+          echo "nuova=false" >> "$GITHUB_OUTPUT"
+
+      - name: Note dalla PR unita
+        if: steps.c.outputs.nuova == 'true'
+        run: |
+          gh api "repos/$REPO/commits/$SHA/pulls" \
+            --jq '[.[] | select(.merged_at != null)][0] | "\(.body // "")\n\nPR #\(.number)"' > note.md
+          if [ ! -s note.md ] || [ "$(head -c 4 note.md)" = "null" ]; then
+            echo "Release ${{ steps.v.outputs.tag }}" > note.md
+          fi
+
+      - name: Crea la release
+        if: steps.c.outputs.nuova == 'true'
+        run: |
+          gh release create "${{ steps.v.outputs.tag }}" --repo "$REPO" --target "$SHA" \
+            --title "${{ steps.v.outputs.tag }}" --notes-file note.md --latest
