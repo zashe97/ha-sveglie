@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.loader import async_get_integration
 
@@ -27,6 +27,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     integrazione = await async_get_integration(hass, DOMAIN)
     await async_registra_scheda(hass, str(integrazione.version))
     entry.async_on_unload(entry.add_update_listener(_async_aggiornata))
+
+    @callback
+    def _dispositivo_rinominato(evento: Event[dr.EventDeviceRegistryUpdatedData]) -> None:
+        # nome del gruppo e entity_id delle sveglie seguono il nome del dispositivo
+        if evento.data["action"] == "update" and (
+            {"name", "name_by_user"} & set(evento.data.get("changes", {}))
+        ):
+            gestore.sincronizza()
+
+    entry.async_on_unload(
+        hass.bus.async_listen(dr.EVENT_DEVICE_REGISTRY_UPDATED, _dispositivo_rinominato)
+    )
     return True
 
 

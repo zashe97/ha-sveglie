@@ -59,6 +59,10 @@ tutta la casa; il calendario va bene nella scheda *Calendario* della dashboard.
   (*Timer sound*: anche il tono sveglia di Alexa) e vale per tutti i timer di quell'Echo.
 - Se nessuno la ferma smette dopo la **durata** scelta (10 minuti di default): l'integrazione rilancia la
   suonata finché serve. Sull'Echo lascia *"Timers ring for"* ad almeno 1 minuto.
+- **Entity_id stabili**: le entità di una sveglia si chiamano per esempio
+  `switch.sveglie_echo_soggiorno_sveglia_1_accesa`. Il numero non cambia mai, neanche se cambi
+  l'ora; la prima parte segue il nome del dispositivo (rinomini l'Echo → si aggiornano da sole).
+  Il nome visibile invece segue l'ora e i giorni.
 - **Piano B sul telefono**: se all'ora della sveglia l'Echo è scollegato o non comincia a squillare entro
   15 secondi, la sveglia suona sui *telefoni di riserva* scelti nelle opzioni (app Home Assistant): una
   notifica critica ogni minuto con **Ferma** e **Posticipa**. Su iPhone serve permettere gli *avvisi

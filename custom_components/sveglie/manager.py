@@ -45,6 +45,7 @@ from .const import (
     SUBENTRY_SVEGLIA,
 )
 from .dispositivi import assicura_gruppi
+from .identificativi import allinea_entity_id, assegna_numeri
 from .logic import (
     ErroreSveglia,
     Sveglia,
@@ -200,6 +201,9 @@ class GestoreSveglie:
             if sv.posticipata:
                 self._programma(sv)
         assicura_gruppi(self.hass, self.entry, [s.device_id for s in self.sveglie.values()])
+        for sv in assegna_numeri(self.sveglie.values()):
+            self._scrivi(sv)
+        allinea_entity_id(self.hass, self.entry, self.sveglie)
         if nuove:
             async_dispatcher_send(self.hass, SEGNALE_NUOVE, nuove)
         async_dispatcher_send(self.hass, SEGNALE_AGGIORNATE)
