@@ -17,6 +17,16 @@ helper o automazioni.
   *"sposta la sveglia delle 7 alle 7:30"*, *"metti il volume progressivo alla sveglia delle 7"*.
 - *"Posticipa"* / *"ancora 5 minuti"* (predefinito 9 minuti), *"Alexa, stop"*.
 
+## La scheda Sveglie
+
+Come l'app Sveglia del telefono: in alto **Salta la prossima**, sotto l'elenco con l'ora grande, il nome, i
+giorni, dove suona e l'interruttore; **+** per aggiungerne una, tocca una sveglia per modificarla o eliminarla.
+Nella finestra: ora, giorni (L M M G V S D, nessuno = una volta sola), nome, *Suona su*, volume graduale,
+salta i festivi, durata.
+
+Si carica da sola con l'integrazione: in una dashboard *Aggiungi scheda* → cerca **Sveglie**, oppure in YAML
+`type: custom:sveglie-card` (opzionale `title:`). La possono usare tutti gli utenti di Home Assistant.
+
 ## Dall'interfaccia
 
 Impostazioni → Dispositivi e servizi → **Sveglie** → **Aggiungi sveglia**: ora, giorni (nessuno = una volta
@@ -70,9 +80,12 @@ riavvio.
 
 ## Sicurezza
 
-Nessun endpoint web, nessun servizio registrato, nessuna chiamata di rete, nessun template o comando eseguito,
-nessuna dipendenza esterna. Le sveglie suonano solo sul dispositivo indicato da Home Assistant. Le entità delle
-sveglie sono di categoria *configurazione*, quindi non vengono esposte all'assistente vocale da sole.
+Nessun servizio registrato, nessuna chiamata di rete, nessun template o comando eseguito, nessuna dipendenza
+esterna. La scheda è un file JavaScript dentro l'integrazione (senza librerie esterne) e usa cinque comandi del
+websocket di Home Assistant (`sveglie/*`): rispondono solo a utenti già entrati in HA, controllano ogni valore
+(ora, giorni, durata, nome) e fanno suonare solo su satelliti vocali. Le sveglie suonano solo sul dispositivo
+indicato da Home Assistant. Le entità delle sveglie sono di categoria *configurazione*, quindi non vengono
+esposte all'assistente vocale da sole.
 
 ## Test
 

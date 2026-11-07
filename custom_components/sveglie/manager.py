@@ -283,7 +283,8 @@ class GestoreSveglie:
         )
 
     async def async_modifica(self, sid: str, **campi: Any) -> Sveglia:
-        """Cambia una sveglia: attiva, progressiva, salta_festivi, ora, salta_prossima, durata."""
+        """Cambia una sveglia: attiva, progressiva, salta_festivi, ora, salta_prossima, durata,
+        nome, giorni."""
         sv = self.sveglie.get(sid)
         if sv is None:
             raise ErroreSveglia("Non ho trovato quella sveglia.")
@@ -309,6 +310,20 @@ class GestoreSveglie:
                 sv.data = prossima.date().isoformat() if prossima else None
         if "durata" in campi:
             sv.durata = min(MAX_DURATA, max(1, int(campi["durata"]))) if campi["durata"] else None
+        if campi.get("device_id") and campi["device_id"] != sv.device_id:
+            sv.device_id = campi["device_id"]
+        if "nome" in campi:
+            sv.nome = pulisci_nome(campi["nome"], MAX_LUNGHEZZA_NOME)
+        if "giorni" in campi and campi["giorni"] is not None:
+            giorni = sorted({int(g) for g in campi["giorni"] if 0 <= int(g) <= 6})
+            if giorni != sv.giorni:
+                sv.giorni = giorni
+                sv.salta = None
+                sv.data = None
+                if not giorni:
+                    # diventa singola: la prossima volta che arriva quell'ora
+                    prossima = prossima_suonata(sv, dt_util.now(), self.tz, self.patrono, True)
+                    sv.data = prossima.date().isoformat() if prossima else None
         if sv.attiva and not sv.ripetuta and sv.data and (
             prossima_suonata(sv, dt_util.now(), self.tz, self.patrono) is None
         ):
