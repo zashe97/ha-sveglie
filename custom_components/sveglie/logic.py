@@ -48,6 +48,19 @@ class ErroreSveglia(ValueError):
     """Richiesta che non si può interpretare: il messaggio va detto all'utente."""
 
 
+def pulisci_nome(testo: object, massimo: int = 30) -> str | None:
+    """Nome della sveglia ridotto a lettere, cifre e spazi, corto.
+
+    Il nome torna all'agente vocale nelle frasi: tenerlo semplice impedisce di
+    usarlo per infilare istruzioni nel modello.
+    """
+    if testo is None:
+        return None
+    t = "".join(c if (c.isalnum() or c == " ") else " " for c in str(testo))
+    t = re.sub(r"\s+", " ", t).strip()[:massimo].strip()
+    return t or None
+
+
 def _norm(testo: str) -> str:
     testo = unicodedata.normalize("NFD", testo.lower())
     testo = "".join(c for c in testo if unicodedata.category(c) != "Mn")

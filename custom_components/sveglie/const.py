@@ -12,3 +12,7 @@ DEFAULT_MINUTI_POSTICIPO = 9  # come Alexa
 DEFAULT_RECUPERO_MINUTI = 15  # dopo un riavvio, suona se in ritardo da meno di così
 
 SEGNALE_AGGIORNATE = "sveglie_aggiornate"
+
+MAX_SVEGLIE = 30  # limite di sicurezza: nessuno può riempire HA di sveglie
+MAX_LUNGHEZZA_NOME = 30
+MAX_MINUTI_POSTICIPO = 60
