@@ -23,7 +23,8 @@
           "salita_secondi": "Tempo di salita del volume",
           "minuti_posticipo": "Minuti di posticipo",
           "patrono": "Patrono (giorno/mese)",
-          "recupero_minuti": "Minuti di recupero dopo un riavvio"
+          "recupero_minuti": "Minuti di recupero dopo un riavvio",
+          "telefoni_riserva": "Backup phones"
         },
         "data_description": {
           "dispositivo_predefinito": "Dove suona una sveglia impostata da un posto che non è un satellite (per esempio la chat dell'app).",
@@ -34,7 +35,8 @@
           "salita_secondi": "In quanto tempo il volume passa da iniziale a finale.",
           "minuti_posticipo": "Di quanto sposta la sveglia \"posticipa\". Alexa usa 9 minuti.",
           "patrono": "Per \"salta i festivi\": la festa del patrono della tua città, per esempio 7/12 per Milano. Vuoto se non c'è.",
-          "recupero_minuti": "Se Home Assistant era spento all'ora della sveglia e riparte entro questi minuti, la sveglia suona subito."
+          "recupero_minuti": "Se Home Assistant era spento all'ora della sveglia e riparte entro questi minuti, la sveglia suona subito.",
+          "telefoni_riserva": "If at alarm time the satellite is unreachable or doesn't start ringing within 15 seconds, the alarm rings on these phones (critical notification every minute, with Stop and Snooze). Empty = announcement only."
         }
       }
     },

@@ -16,6 +16,7 @@ CONF_VOLUME_INIZIALE = "volume_iniziale"
 CONF_VOLUME_FINALE = "volume_finale"
 CONF_SALITA_SECONDI = "salita_secondi"
 CONF_PATRONO = "patrono"
+CONF_TELEFONI = "telefoni_riserva"
 
 DEFAULT_MINUTI_POSTICIPO = 9  # come Alexa
 DEFAULT_RECUPERO_MINUTI = 15  # dopo un riavvio, suona se in ritardo da meno di così
@@ -24,6 +25,10 @@ DEFAULT_PROGRESSIVA = False
 DEFAULT_VOLUME_INIZIALE = 10  # %
 DEFAULT_VOLUME_FINALE = 0  # % ; 0 = il volume che il dispositivo aveva prima
 DEFAULT_SALITA_SECONDI = 60
+# piano B: se il satellite non comincia a suonare entro questi secondi, avvisa i telefoni
+CONTROLLO_SECONDI = 15
+RIPETI_AVVISO_SECONDI = 60
+PREFISSO_AZIONE = "SVEGLIE_"
 
 # campi di una sveglia (dati della sottovoce)
 CONF_ORA = "ora"

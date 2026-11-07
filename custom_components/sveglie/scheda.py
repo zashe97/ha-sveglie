@@ -79,7 +79,8 @@ def _gestore(hass: HomeAssistant) -> GestoreSveglie:
 def _quando(sv: Sveglia, adesso: datetime) -> str:
     if sv.ripetuta:
         return descrivi_giorni(sv.giorni)
-    riferimento = sv.prossima or (
+    # spenta (per esempio una singola che ha già suonato): come l'iPhone, niente data vecchia
+    riferimento = sv.prossima if not sv.attiva else sv.prossima or (
         f"{sv.data}T{sv.ora}" if sv.data else None
     )
     if not riferimento:
