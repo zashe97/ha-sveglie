@@ -349,6 +349,32 @@ def prossima_suonata(
     return None if candidato.date() == salta else candidato
 
 
+def suonate_tra(
+    sv: Sveglia,
+    inizio: datetime,
+    fine: datetime,
+    tz: tzinfo,
+    patrono: tuple[int, int] | None = None,
+    massimo: int = 400,
+) -> list[datetime]:
+    """Tutte le suonate di una sveglia tra `inizio` e `fine` (per il calendario)."""
+    if sv.posticipata:
+        if sv.prossima and inizio <= (p := datetime.fromisoformat(sv.prossima)) < fine:
+            return [p]
+        return []
+    trovate: list[datetime] = []
+    dopo = inizio - timedelta(seconds=1)
+    while len(trovate) < massimo:
+        p = prossima_suonata(sv, dopo, tz, patrono)
+        if p is None or p >= fine:
+            break
+        trovate.append(p)
+        if not sv.giorni:
+            break
+        dopo = p
+    return trovate
+
+
 def risolvi_data_singola(ora: time, quando: str | None, adesso: datetime, tz: tzinfo) -> datetime:
     """Data e ora di una sveglia singola, come farebbe Alexa.
 

@@ -1,4 +1,9 @@
-"""Base delle entità di una singola sveglia (una sottovoce = un dispositivo "Sveglia ...")."""
+"""Base delle entità di una singola sveglia.
+
+Ogni sveglia è una sottovoce della configurazione; le sue entità stanno nel dispositivo
+"Sveglie <satellite>" del satellite su cui suona, insieme a quelle delle altre sveglie dello
+stesso satellite.
+"""
 
 from __future__ import annotations
 
@@ -6,16 +11,17 @@ from collections.abc import Callable, Iterable
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from homeassistant.exceptions import HomeAssistantError
+
 from .const import DOMAIN, SEGNALE_AGGIORNATE, SEGNALE_NUOVE
+from .dispositivi import assicura_gruppo
 from .logic import ErroreSveglia, Sveglia
 from .manager import GestoreSveglie
-
-from homeassistant.exceptions import HomeAssistantError
 
 
 def imposta_piattaforma(
@@ -37,6 +43,13 @@ def imposta_piattaforma(
     entry.async_on_unload(async_dispatcher_connect(hass, SEGNALE_NUOVE, _aggiungi))
 
 
+def _etichetta(gestore: GestoreSveglie, sid: str) -> str:
+    """'07:00 dal lunedì al venerdì' (il dispositivo si chiama già "Sveglie ...")."""
+    sub = gestore.entry.subentries.get(sid)
+    titolo = sub.title if sub else "Sveglia"
+    return titolo.removeprefix("Sveglia ") or titolo
+
+
 class EntitaSveglia(Entity):
     """Un'entità che appartiene a una sveglia."""
 
@@ -48,14 +61,10 @@ class EntitaSveglia(Entity):
         self.sid = sid
         self._attr_unique_id = f"{sid}_{chiave}"
         self._attr_translation_key = chiave
-        sub = gestore.entry.subentries.get(sid)
-        self._attr_device_info = dr.DeviceInfo(
-            identifiers={(DOMAIN, sid)},
-            name=sub.title if sub else "Sveglia",
-            manufacturer="Sveglie",
-            model="Sveglia",
-            entry_type=dr.DeviceEntryType.SERVICE,
-        )
+        sv = gestore.sveglie.get(sid)
+        self._attr_translation_placeholders = {"sveglia": _etichetta(gestore, sid)}
+        # il dispositivo "Sveglie <satellite>" esiste già (lo crea il gestore): ci si aggancia
+        self.device_entry = assicura_gruppo(gestore.hass, gestore.entry, sv.device_id if sv else None)
 
     @property
     def sveglia(self) -> Sveglia | None:
@@ -74,10 +83,14 @@ class EntitaSveglia(Entity):
     @callback
     def _aggiorna(self) -> None:
         self._aggiorna_attributi()
-        # il nome del dispositivo segue il titolo della sveglia
-        sub = self.gestore.entry.subentries.get(self.sid)
-        if sub and self.device_entry and self.device_entry.name != sub.title:
-            dr.async_get(self.hass).async_update_device(self.device_entry.id, name=sub.title)
+        # il nome segue il titolo della sveglia
+        self._attr_translation_placeholders = {"sveglia": _etichetta(self.gestore, self.sid)}
+        # se la sveglia è passata a un altro satellite, l'entità cambia gruppo
+        sv = self.sveglia
+        if sv and self.registry_entry:
+            gruppo = assicura_gruppo(self.hass, self.gestore.entry, sv.device_id)
+            if gruppo and self.registry_entry.device_id != gruppo.id:
+                er.async_get(self.hass).async_update_entity(self.entity_id, device_id=gruppo.id)
         self.async_write_ha_state()
 
     @callback

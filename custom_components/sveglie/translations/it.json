@@ -109,26 +109,37 @@
         "name": "Prossima sveglia"
       },
       "prossima_suonata": {
-        "name": "Prossima suonata"
+        "name": "{sveglia} prossima suonata"
+      },
+      "prossima_dispositivo": {
+        "name": "Prossima sveglia"
       }
     },
     "switch": {
       "attiva": {
-        "name": "Accesa"
+        "name": "{sveglia} accesa"
       },
       "progressiva": {
-        "name": "Volume progressivo"
+        "name": "{sveglia} volume progressivo"
       },
       "salta_festivi": {
-        "name": "Salta i festivi"
+        "name": "{sveglia} salta i festivi"
       },
       "salta_prossima": {
-        "name": "Salta la prossima"
+        "name": "{sveglia} salta la prossima"
       }
     },
     "time": {
       "ora": {
-        "name": "Ora"
+        "name": "{sveglia} ora"
+      }
+    },
+    "calendar": {
+      "calendario": {
+        "name": "Calendario"
+      },
+      "calendario_dispositivo": {
+        "name": "Sveglie"
       }
     }
   }

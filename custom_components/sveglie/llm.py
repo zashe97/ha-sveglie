@@ -20,6 +20,7 @@ from homeassistant.helpers.llm import (
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .dispositivi import nome_dispositivo
 from .logic import (
     GIORNI,
     MESI,
@@ -207,6 +208,13 @@ class ElencaSveglie(Tool):
         if not elenco:
             return ToolResult(data={"sveglie": [], "frase": "Non hai sveglie impostate."})
         descrizioni = [descrivi(s, adesso, gestore.tz) for s in elenco]
+        # con più satelliti si dice dove suona ognuna (come chiedere ad Alexa da un'altra stanza)
+        dove = {s.device_id for s in elenco}
+        if len(dove) > 1 or dove != {llm_context.device_id}:
+            descrizioni = [
+                f"{d} su {nome}" if (nome := nome_dispositivo(hass, s.device_id)) else d
+                for s, d in zip(elenco, descrizioni)
+            ]
         if len(descrizioni) == 1:
             frase = f"Hai una {descrizioni[0]}."
         else:

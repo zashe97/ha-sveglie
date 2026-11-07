@@ -5,12 +5,14 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
+from .dispositivi import dispositivo_del_gruppo
 from .frasi import async_registra_frasi
 from .manager import GestoreSveglie
 
-PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.TIME]
+PLATFORMS = [Platform.CALENDAR, Platform.SENSOR, Platform.SWITCH, Platform.TIME]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -39,3 +41,14 @@ async def _async_aggiornata(hass: HomeAssistant, entry: ConfigEntry) -> None:
         await hass.config_entries.async_reload(entry.entry_id)
         return
     gestore.sincronizza()
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: ConfigEntry, device: dr.DeviceEntry
+) -> bool:
+    """Si può togliere un gruppo "Sveglie <satellite>" solo se non ha sveglie."""
+    satellite = dispositivo_del_gruppo(device)
+    if satellite is None:
+        return False
+    gestore: GestoreSveglie | None = hass.data.get(DOMAIN)
+    return not (gestore and any(s.device_id == satellite for s in gestore.sveglie.values()))

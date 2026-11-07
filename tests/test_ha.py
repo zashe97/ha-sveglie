@@ -270,3 +270,79 @@ async def test_programmata_suona_allora_giusta(hass: HomeAssistant, echo) -> Non
     await asyncio.sleep(1.2)
     hass.states.async_set(ids["binary_sensor"], "off")
     await asyncio.wait_for(task, 5)
+
+
+def _secondo_echo(hass: HomeAssistant):
+    finto = MockConfigEntry(domain="test")
+    finto.add_to_hass(hass)
+    dev = dr.async_get(hass).async_get_or_create(
+        config_entry_id=finto.entry_id, identifiers={("test", "camera")}, name="Echo Camera"
+    )
+    er.async_get(hass).async_get_or_create(
+        "assist_satellite", "esphome", "AA:BB/0/assist_satellite/x", device_id=dev.id,
+        config_entry=finto, original_name="Assist satellite",
+    )
+    return dev
+
+
+async def test_gruppi_per_dispositivo(hass: HomeAssistant, echo, caplog) -> None:
+    dev, _, _ = echo
+    camera = _secondo_echo(hass)
+    entry = await _avvia(hass)
+    dreg, ereg = dr.async_get(hass), er.async_get(hass)
+    # un gruppo "Sveglie <echo>" per ogni satellite, anche senza sveglie, collegato all'echo
+    gruppi = {d.via_device_id: d for d in dr.async_entries_for_config_entry(dreg, entry.entry_id)
+              if d.via_device_id}
+    assert set(gruppi) == {dev.id, camera.id}
+    assert gruppi[dev.id].name == "Sveglie Echo Soggiorno"
+    # sulla pagina dell'Echo: solo prossima sveglia e calendario, di sola lettura
+    sull_echo = sorted(e.domain for e in er.async_entries_for_device(ereg, dev.id)
+                       if e.platform == DOMAIN)
+    assert sull_echo == ["calendar", "sensor"]
+
+    await _strumento(hass, dev.id, "sveglie__imposta", ora="07:00", ripeti="feriali")
+    await _strumento(hass, camera.id, "sveglie__imposta", ora="06:30", ripeti="weekend")
+    gestore = hass.data[DOMAIN]
+    sid = next(s for s, sv in gestore.sveglie.items() if sv.device_id == dev.id)
+    proprie = [e for e in ereg.entities.values() if e.config_subentry_id == sid]
+    assert len(proprie) == 6 and {e.device_id for e in proprie} == {gruppi[dev.id].id}
+    accesa = next(e for e in proprie if e.domain == "switch" and "accesa" in e.entity_id)
+    assert hass.states.get(accesa.entity_id).attributes["friendly_name"].startswith(
+        "Sveglie Echo Soggiorno 07:00 dal lunedì"
+    )
+    # il sensore sull'echo vede solo le sue
+    sensore = next(e.entity_id for e in er.async_entries_for_device(ereg, dev.id)
+                   if e.platform == DOMAIN and e.domain == "sensor")
+    assert hass.states.get(sensore).attributes["numero"] == 1
+
+    # calendario: una settimana = 5 feriali sull'echo, 7 in tutte
+    cal_echo = next(e.entity_id for e in er.async_entries_for_device(ereg, dev.id)
+                    if e.platform == DOMAIN and e.domain == "calendar")
+    inizio = dt_util.start_of_local_day()
+    for cal, attesi in [(cal_echo, 5), ("calendar.sveglie_calendario", 7)]:
+        r = await hass.services.async_call(
+            "calendar", "get_events",
+            {"entity_id": cal, "start_date_time": inizio, "end_date_time": inizio + timedelta(days=7)},
+            blocking=True, return_response=True,
+        )
+        assert len(r[cal]["events"]) == attesi, (cal, r)
+
+    # "che sveglie ho?" le dice tutte, con dove suonano
+    r = await _strumento(hass, dev.id, "sveglie__elenca")
+    assert "su Echo Soggiorno" in r["frase"] and "su Echo Camera" in r["frase"], r
+
+    # spostata da interfaccia sull'altro echo: le entità cambiano gruppo
+    res = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, "sveglia"), context={"source": SOURCE_RECONFIGURE, "subentry_id": sid}
+    )
+    res = await hass.config_entries.subentries.async_configure(
+        res["flow_id"],
+        {"ora": "07:00:00", "giorni": ["0", "1", "2", "3", "4"], "device_id": camera.id,
+         "attiva": True, "progressiva": False, "salta_festivi": False},
+    )
+    await hass.async_block_till_done()
+    proprie = [e for e in ereg.entities.values() if e.config_subentry_id == sid]
+    assert {e.device_id for e in proprie} == {gruppi[camera.id].id}
+    assert hass.states.get(sensore).attributes["numero"] == 0
+    # nessun avviso di HA su dispositivi o sottovoci usati male
+    assert "subentry" not in caplog.text and "deprecated" not in caplog.text, caplog.text
