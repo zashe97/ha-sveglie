@@ -189,8 +189,8 @@ async def test_suona_progressiva_e_stop(hass: HomeAssistant, echo) -> None:
     assert volumi and volumi[0].data["volume_level"] == 0.1, volumi
     hass.states.async_set(ids["binary_sensor"], "on")
     await asyncio.sleep(1.5)
-    # singola: dopo aver suonato sparisce
-    assert not gestore.sveglie
+    # singola: dopo aver suonato resta nell'elenco, spenta
+    assert [(s.attiva, s.prossima) for s in gestore.sveglie.values()] == [(False, None)]
     # posticipa a voce: ferma il suono e crea la posticipata
     r = await _strumento(hass, dev.id, "sveglie__posticipa")
     assert r["success"], r
@@ -264,13 +264,29 @@ async def test_programmata_suona_allora_giusta(hass: HomeAssistant, echo) -> Non
     await asyncio.sleep(0.2)
     assert eventi and eventi[0][1] == "sveglia", eventi
     await hass.async_block_till_done()
-    assert len(entry.subentries) == 0  # singola: sparita dopo aver suonato
+    # singola: dopo aver suonato resta, spenta (come Alexa e iPhone)
+    assert len(entry.subentries) == 1
     gestore = hass.data[DOMAIN]
+    (suonata,) = gestore.sveglie.values()
+    assert not suonata.attiva and suonata.prossima is None
     task, _ = gestore._suonate[dev.id]
     hass.states.async_set(ids["binary_sensor"], "on")
     await asyncio.sleep(1.2)
     hass.states.async_set(ids["binary_sensor"], "off")
     await asyncio.wait_for(task, 5)
+    # "che sveglie ho" dice solo quelle accese
+    r = await _strumento(hass, dev.id, "sveglie__elenca")
+    assert r["frase"] == "Non hai sveglie attive.", r
+    # chiederla di nuovo alla stessa ora riaccende quella, non ne crea un'altra
+    r = await _strumento(hass, dev.id, "sveglie__imposta", ora=suonata.ora)
+    assert r["success"], r
+    await hass.async_block_till_done()
+    assert len(entry.subentries) == 1
+    sv = gestore.sveglie[suonata.id]
+    assert sv.attiva and sv.prossima and datetime.fromisoformat(sv.prossima) > dt_util.now()
+    assert not sv.giorni
+    r = await _strumento(hass, dev.id, "sveglie__elenca")
+    assert r["frase"].startswith("Hai una sveglia"), r
 
 
 def _secondo_echo(hass: HomeAssistant):

@@ -61,7 +61,9 @@ tutta la casa; il calendario va bene nella scheda *Calendario* della dashboard.
   suonata finché serve. Sull'Echo lascia *"Timers ring for"* ad almeno 1 minuto.
 - **Volume progressivo**: dal volume iniziale al finale nel tempo di salita, poi rimette il volume di prima.
 - Le sveglie sopravvivono ai riavvii; se HA era spento all'ora della sveglia e riparte entro 15 minuti, suona
-  subito. Una sveglia singola, dopo aver suonato, sparisce (come Alexa).
+  subito. Una sveglia singola, dopo aver suonato, resta nell'elenco spenta (come Alexa e iPhone):
+  chiedendo di nuovo una sveglia alla stessa ora si riaccende quella invece di crearne un'altra.
+  *"Che sveglie ho?"* dice solo quelle accese.
 
 ## Installazione
 

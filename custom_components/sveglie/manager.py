@@ -183,9 +183,10 @@ class GestoreSveglie:
                 continue
             nuova = prossima_suonata(sv, adesso, self.tz, self.patrono)
             if nuova is None and not sv.ripetuta and sv.attiva and sv.data:
-                # singola già passata (o saltata): non serve più
-                self.hass.config_entries.async_remove_subentry(self.entry, sv.id)
-                continue
+                # singola già passata (o saltata): resta nell'elenco, spenta, come su Alexa e iPhone
+                sv.attiva = False
+                sv.salta = None
+                self._scrivi(sv)
             sv.prossima = nuova.isoformat() if nuova else None
             self.sveglie[sv.id] = sv
             self._programma(sv)
@@ -262,6 +263,29 @@ class GestoreSveglie:
                 if not altra.attiva:
                     return await self.async_modifica(altra.id, attiva=True)
                 return altra
+        if not sv.ripetuta:
+            # come Alexa: "sveglia alle 7" riaccende la singola delle 7 già suonata (o spenta)
+            # invece di crearne un'altra uguale
+            for altra in self.sveglie.values():
+                if (
+                    not altra.posticipata
+                    and not altra.ripetuta
+                    and altra.device_id == sv.device_id
+                    and altra.ora == sv.ora
+                    and not altra.attiva
+                ):
+                    altra.attiva = True
+                    altra.data = sv.data
+                    altra.salta = None
+                    if sv.nome:
+                        altra.nome = sv.nome
+                    if progressiva is not None:
+                        altra.progressiva = bool(progressiva)
+                    if durata:
+                        altra.durata = sv.durata
+                    self._scrivi(altra)
+                    self.sincronizza()
+                    return self.sveglie[altra.id]
         if len(self.sveglie) >= MAX_SVEGLIE:
             raise ErroreSveglia(f"Hai già {MAX_SVEGLIE} sveglie: cancellane qualcuna prima.")
         sid = self._aggiungi_sottovoce(sv)
@@ -435,11 +459,12 @@ class GestoreSveglie:
             self._programma(sv)
             async_dispatcher_send(self.hass, SEGNALE_AGGIORNATE)
         else:
-            # singola: come Alexa, dopo aver suonato sparisce
-            self.sveglie.pop(sv.id, None)
+            # singola: come Alexa e iPhone, dopo aver suonato resta nell'elenco spenta
             self._previste.pop(sv.id, None)
-            if sv.id in self.entry.subentries:
-                self.hass.config_entries.async_remove_subentry(self.entry, sv.id)
+            sv.attiva = False
+            sv.prossima = None
+            sv.salta = None
+            self._scrivi(sv)
             async_dispatcher_send(self.hass, SEGNALE_AGGIORNATE)
         await self._async_salva()
 
