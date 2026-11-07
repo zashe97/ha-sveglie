@@ -219,9 +219,53 @@ def interpreta_durata(testo: str) -> int:
     return totale
 
 
+def pasqua(anno: int) -> date:
+    """Domenica di Pasqua (calendario gregoriano, algoritmo di Meeus/Jones/Butcher)."""
+    a = anno % 19
+    b, c = divmod(anno, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    mese, giorno = divmod(h + l - 7 * m + 114, 31)
+    return date(anno, mese, giorno + 1)
+
+
+def festivi_italiani(anno: int, patrono: tuple[int, int] | None = None) -> set[date]:
+    """Feste nazionali italiane dell'anno, più il patrono (giorno, mese) se dato."""
+    fisse = [(1, 1), (6, 1), (25, 4), (1, 5), (2, 6), (15, 8), (1, 11), (8, 12), (25, 12), (26, 12)]
+    giorni = {date(anno, m, g) for g, m in fisse}
+    p = pasqua(anno)
+    giorni.update({p, p + timedelta(days=1)})
+    if patrono:
+        try:
+            giorni.add(date(anno, patrono[1], patrono[0]))
+        except ValueError:
+            pass
+    return giorni
+
+
+def interpreta_patrono(testo: str | None) -> tuple[int, int] | None:
+    """'7/12', '29-06' -> (giorno, mese). Vuoto -> None."""
+    if not testo or not str(testo).strip():
+        return None
+    m = re.fullmatch(r"\s*(\d{1,2})\s*[/.\-]\s*(\d{1,2})\s*", str(testo))
+    if not m:
+        raise ErroreSveglia(f"Il patrono va scritto giorno/mese, per esempio 7/12, non «{testo}».")
+    g, mese = int(m.group(1)), int(m.group(2))
+    try:
+        date(2024, mese, g)  # anno bisestile: accetta il 29/2
+    except ValueError as err:
+        raise ErroreSveglia(f"La data del patrono «{testo}» non esiste.") from err
+    return (g, mese)
+
+
 @dataclass
 class Sveglia:
-    """Una sveglia salvata."""
+    """Una sveglia."""
 
     id: str
     ora: str  # "HH:MM"
@@ -229,8 +273,13 @@ class Sveglia:
     giorni: list[int] = field(default_factory=list)  # vuota = una volta sola
     data: str | None = None  # "YYYY-MM-DD", solo per quelle singole
     nome: str | None = None
-    prossima: str | None = None  # ISO con fuso, calcolata
+    attiva: bool = True
+    progressiva: bool = False  # volume che sale piano
+    salta_festivi: bool = False  # solo per le ripetute
+    durata: int | None = None  # minuti di suonata; None = quella generale
+    salta: str | None = None  # "YYYY-MM-DD": data della prossima suonata da saltare
     posticipata: bool = False
+    prossima: str | None = None  # ISO con fuso, calcolata, non salvata nella configurazione
 
     @property
     def ripetuta(self) -> bool:
@@ -239,34 +288,65 @@ class Sveglia:
     def to_dict(self) -> dict:
         return asdict(self)
 
+    def configurazione(self) -> dict:
+        """I campi che definiscono la sveglia (senza quelli calcolati)."""
+        d = asdict(self)
+        d.pop("prossima")
+        d.pop("id")
+        return d
+
     @classmethod
     def from_dict(cls, d: dict) -> Sveglia:
         campi = {k: d[k] for k in cls.__dataclass_fields__ if k in d}
+        if "giorni" in campi:
+            campi["giorni"] = sorted({int(x) for x in campi["giorni"] or []})
         return cls(**campi)
 
 
-def prossima_suonata(sv: Sveglia, dopo: datetime, tz: tzinfo) -> datetime | None:
-    """Prima suonata strettamente dopo `dopo`. None se una sveglia singola è già passata."""
+def prossima_suonata(
+    sv: Sveglia,
+    dopo: datetime,
+    tz: tzinfo,
+    patrono: tuple[int, int] | None = None,
+    ignora_spenta: bool = False,
+) -> datetime | None:
+    """Prima suonata strettamente dopo `dopo`.
+
+    None se la sveglia è spenta, o se una sveglia singola è già passata (o saltata).
+    Salta la data in `salta` e, per le ripetute con salta_festivi, le feste italiane.
+    """
+    if not sv.attiva and not ignora_spenta:
+        return None
     hh, mm = (int(x) for x in sv.ora.split(":"))
     ora = time(hh, mm)
     locale = dopo.astimezone(tz)
+    salta = date.fromisoformat(sv.salta) if sv.salta else None
     if sv.giorni:
-        for delta in range(0, 8):
+        feste: dict[int, set[date]] = {}
+        for delta in range(0, 400):
             g = locale.date() + timedelta(days=delta)
-            if g.weekday() in sv.giorni:
-                candidato = datetime.combine(g, ora, tzinfo=tz)
-                if candidato > locale:
-                    return candidato
+            if g.weekday() not in sv.giorni or g == salta:
+                continue
+            if sv.salta_festivi:
+                if g.year not in feste:
+                    feste[g.year] = festivi_italiani(g.year, patrono)
+                if g in feste[g.year]:
+                    continue
+            candidato = datetime.combine(g, ora, tzinfo=tz)
+            if candidato > locale:
+                return candidato
         return None
     if sv.data:
-        candidato = datetime.combine(date.fromisoformat(sv.data), ora, tzinfo=tz)
+        giorno = date.fromisoformat(sv.data)
+        if giorno == salta:
+            return None
+        candidato = datetime.combine(giorno, ora, tzinfo=tz)
         return candidato if candidato > locale else None
     # nessuna data: la prossima volta che sono quell'ora (come Alexa)
     candidato = datetime.combine(locale.date(), ora, tzinfo=tz)
     if candidato <= locale:
-        candidato += timedelta(days=1)
-        candidato = datetime.combine(candidato.date(), ora, tzinfo=tz)
-    return candidato
+        candidato = datetime.combine(locale.date() + timedelta(days=1), ora, tzinfo=tz)
+    return None if candidato.date() == salta else candidato
 
 
 def risolvi_data_singola(ora: time, quando: str | None, adesso: datetime, tz: tzinfo) -> datetime:
@@ -334,4 +414,8 @@ def descrivi(sv: Sveglia, adesso: datetime, tz: tzinfo) -> str:
         testo = f"sveglia{nome} {alle}{hh}:{mm:02d}"
     if sv.posticipata:
         testo += " (posticipata)"
+    if not sv.attiva:
+        testo += " (spenta)"
+    elif sv.salta:
+        testo += " (salta la prossima)"
     return testo

@@ -3,10 +3,12 @@
     "step": {
       "user": {
         "title": "Sveglie",
-        "description": "Aggiunge le sveglie vocali. Dopo l'installazione basta dire al tuo assistente: \"sveglia alle 7\"."
+        "description": "Aggiunge le sveglie. Si impostano a voce (\"sveglia alle 7\") o da qui con \"Aggiungi sveglia\"."
       }
     },
-    "abort": { "single_instance_allowed": "Sveglie è già configurata." }
+    "abort": {
+      "single_instance_allowed": "Sveglie è già configurata."
+    }
   },
   "options": {
     "step": {
@@ -14,16 +16,120 @@
         "title": "Opzioni sveglie",
         "data": {
           "dispositivo_predefinito": "Dispositivo di riserva",
+          "durata": "Durata della suonata",
+          "progressiva": "Volume progressivo per le nuove sveglie",
+          "volume_iniziale": "Volume iniziale",
+          "volume_finale": "Volume finale",
+          "salita_secondi": "Tempo di salita del volume",
           "minuti_posticipo": "Minuti di posticipo",
+          "patrono": "Patrono (giorno/mese)",
           "recupero_minuti": "Minuti di recupero dopo un riavvio"
         },
         "data_description": {
           "dispositivo_predefinito": "Dove suona una sveglia impostata da un posto che non è un satellite (per esempio la chat dell'app).",
+          "durata": "Se nessuno la ferma, la sveglia smette dopo questi minuti. Sull'Echo lascia \"Timers ring for\" ad almeno 1 minuto.",
+          "progressiva": "Ogni sveglia ha comunque il suo interruttore.",
+          "volume_iniziale": "Da dove parte il volume progressivo.",
+          "volume_finale": "0 = il volume che il dispositivo aveva prima. Vale anche per le sveglie non progressive.",
+          "salita_secondi": "In quanto tempo il volume passa da iniziale a finale.",
           "minuti_posticipo": "Di quanto sposta la sveglia \"posticipa\". Alexa usa 9 minuti.",
+          "patrono": "Per \"salta i festivi\": la festa del patrono della tua città, per esempio 7/12 per Milano. Vuoto se non c'è.",
           "recupero_minuti": "Se Home Assistant era spento all'ora della sveglia e riparte entro questi minuti, la sveglia suona subito."
         }
       }
+    },
+    "error": {
+      "patrono_non_valido": "Scrivi giorno/mese, per esempio 7/12."
     }
   },
-  "entity": { "sensor": { "prossima": { "name": "Prossima sveglia" } } }
+  "config_subentries": {
+    "sveglia": {
+      "initiate_flow": {
+        "user": "Aggiungi sveglia",
+        "reconfigure": "Modifica sveglia"
+      },
+      "entry_type": "Sveglia",
+      "step": {
+        "user": {
+          "title": "Nuova sveglia",
+          "data": {
+            "ora": "Ora",
+            "giorni": "Giorni in cui ripetere",
+            "data": "Data (solo se non si ripete)",
+            "nome": "Nome",
+            "device_id": "Dispositivo che suona",
+            "attiva": "Accesa",
+            "progressiva": "Volume progressivo",
+            "salta_festivi": "Salta i giorni festivi",
+            "durata": "Durata della suonata"
+          },
+          "data_description": {
+            "giorni": "Nessun giorno = suona una volta sola.",
+            "data": "Vuota = la prossima volta che arriva quell'ora (stasera o domattina).",
+            "device_id": "Vuoto = il dispositivo di riserva delle opzioni.",
+            "salta_festivi": "Solo per le sveglie ripetute: niente suono nelle feste nazionali e nel patrono.",
+            "durata": "Vuota = quella delle opzioni generali."
+          }
+        },
+        "reconfigure": {
+          "title": "Modifica sveglia",
+          "data": {
+            "ora": "Ora",
+            "giorni": "Giorni in cui ripetere",
+            "data": "Data (solo se non si ripete)",
+            "nome": "Nome",
+            "device_id": "Dispositivo che suona",
+            "attiva": "Accesa",
+            "progressiva": "Volume progressivo",
+            "salta_festivi": "Salta i giorni festivi",
+            "durata": "Durata della suonata"
+          },
+          "data_description": {
+            "giorni": "Nessun giorno = suona una volta sola.",
+            "data": "Vuota = la prossima volta che arriva quell'ora (stasera o domattina).",
+            "device_id": "Vuoto = il dispositivo di riserva delle opzioni.",
+            "salta_festivi": "Solo per le sveglie ripetute: niente suono nelle feste nazionali e nel patrono.",
+            "durata": "Vuota = quella delle opzioni generali."
+          }
+        }
+      },
+      "error": {
+        "dispositivo_mancante": "Scegli il dispositivo che deve suonare (o impostane uno di riserva nelle opzioni).",
+        "gia_passata": "Quella data e ora sono già passate."
+      },
+      "abort": {
+        "troppe": "Hai già 30 sveglie: cancellane qualcuna prima.",
+        "reconfigure_successful": "Sveglia aggiornata."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "prossima": {
+        "name": "Prossima sveglia"
+      },
+      "prossima_suonata": {
+        "name": "Prossima suonata"
+      }
+    },
+    "switch": {
+      "attiva": {
+        "name": "Accesa"
+      },
+      "progressiva": {
+        "name": "Volume progressivo"
+      },
+      "salta_festivi": {
+        "name": "Salta i festivi"
+      },
+      "salta_prossima": {
+        "name": "Salta la prossima"
+      }
+    },
+    "time": {
+      "ora": {
+        "name": "Ora"
+      }
+    }
+  }
 }

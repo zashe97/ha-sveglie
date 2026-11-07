@@ -1,4 +1,4 @@
-"""Sensore 'Prossima sveglia' con l'elenco completo negli attributi."""
+"""Sensori: 'Prossima sveglia' (tutte) e la prossima suonata di ogni sveglia."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, SEGNALE_AGGIORNATE
+from .entita import EntitaSveglia, imposta_piattaforma
 from .logic import descrivi
 
 
@@ -20,10 +21,11 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback
 ) -> None:
     async_add_entities([ProssimaSveglia(entry)])
+    imposta_piattaforma(hass, entry, async_add_entities, lambda g, sid: [ProssimaSuonata(g, sid)])
 
 
 class ProssimaSveglia(SensorEntity):
-    """Quando suona la prossima sveglia."""
+    """Quando suona la prossima sveglia, con l'elenco completo negli attributi."""
 
     _attr_has_entity_name = True
     _attr_translation_key = "prossima"
@@ -50,9 +52,8 @@ class ProssimaSveglia(SensorEntity):
         gestore = self.hass.data.get(DOMAIN)
         elenco = gestore.elenco() if gestore else []
         adesso = dt_util.now()
-        self._attr_native_value = (
-            datetime.fromisoformat(elenco[0].prossima) if elenco and elenco[0].prossima else None
-        )
+        attive = [s for s in elenco if s.prossima]
+        self._attr_native_value = datetime.fromisoformat(attive[0].prossima) if attive else None
         disp = dr.async_get(self.hass)
         righe = []
         for s in elenco:
@@ -64,8 +65,33 @@ class ProssimaSveglia(SensorEntity):
                     "ora": s.ora,
                     "giorni": s.giorni,
                     "nome": s.nome,
+                    "attiva": s.attiva,
+                    "posticipata": s.posticipata,
                     "dispositivo": (dev.name_by_user or dev.name) if dev else None,
                 }
             )
         self._attr_extra_state_attributes = {"sveglie": righe, "numero": len(righe)}
         self.async_write_ha_state()
+
+
+class ProssimaSuonata(EntitaSveglia, SensorEntity):
+    """Quando suonerà questa sveglia (vuoto se è spenta)."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:alarm-check"
+
+    def __init__(self, gestore, sid) -> None:
+        super().__init__(gestore, sid, "prossima_suonata")
+
+    @callback
+    def _aggiorna_attributi(self) -> None:
+        sv = self.sveglia
+        self._attr_native_value = (
+            datetime.fromisoformat(sv.prossima) if sv and sv.prossima else None
+        )
+        if sv:
+            self._attr_extra_state_attributes = {
+                "descrizione": descrivi(sv, dt_util.now(), self.gestore.tz),
+                "giorni": sv.giorni,
+                "durata_minuti": sv.durata or self.gestore.durata,
+            }
