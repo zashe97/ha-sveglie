@@ -204,9 +204,10 @@ class ElencaSveglie(Tool):
         if gestore is None:
             return _errore("Le sveglie non sono attive.")
         adesso = dt_util.now()
-        elenco = gestore.elenco()
+        # come Alexa: dice solo quelle accese (le singole già suonate restano spente nell'elenco)
+        elenco = [s for s in gestore.elenco() if s.attiva]
         if not elenco:
-            return ToolResult(data={"sveglie": [], "frase": "Non hai sveglie impostate."})
+            return ToolResult(data={"sveglie": [], "frase": "Non hai sveglie attive."})
         descrizioni = [descrivi(s, adesso, gestore.tz) for s in elenco]
         # con più satelliti si dice dove suona ognuna (come chiedere ad Alexa da un'altra stanza)
         dove = {s.device_id for s in elenco}
