@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sveglie",
+        "description": "Aggiunge le sveglie vocali. Dopo l'installazione basta dire al tuo assistente: \"sveglia alle 7\"."
+      }
+    },
+    "abort": { "single_instance_allowed": "Sveglie è già configurata." }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opzioni sveglie",
+        "data": {
+          "dispositivo_predefinito": "Dispositivo di riserva",
+          "minuti_posticipo": "Minuti di posticipo",
+          "recupero_minuti": "Minuti di recupero dopo un riavvio"
+        },
+        "data_description": {
+          "dispositivo_predefinito": "Dove suona una sveglia impostata da un posto che non è un satellite (per esempio la chat dell'app).",
+          "minuti_posticipo": "Di quanto sposta la sveglia \"posticipa\". Alexa usa 9 minuti.",
+          "recupero_minuti": "Se Home Assistant era spento all'ora della sveglia e riparte entro questi minuti, la sveglia suona subito."
+        }
+      }
+    }
+  },
+  "entity": { "sensor": { "prossima": { "name": "Prossima sveglia" } } }
+}

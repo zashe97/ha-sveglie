@@ -1,0 +1,37 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sveglie",
+        "description": "Adds voice alarms. After setup just tell your assistant: \"set an alarm for 7\" (Italian phrases are tuned best)."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Sveglie is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Alarm options",
+        "data": {
+          "dispositivo_predefinito": "Fallback device",
+          "minuti_posticipo": "Snooze minutes",
+          "recupero_minuti": "Catch-up minutes after a restart"
+        },
+        "data_description": {
+          "dispositivo_predefinito": "Where an alarm rings when it was set from somewhere that is not a satellite (e.g. the app chat).",
+          "minuti_posticipo": "How far snooze moves the alarm. Alexa uses 9.",
+          "recupero_minuti": "If Home Assistant was down at alarm time and comes back within these minutes, the alarm rings right away."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "prossima": {
+        "name": "Next alarm"
+      }
+    }
+  }
+}
