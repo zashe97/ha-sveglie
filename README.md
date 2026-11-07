@@ -59,6 +59,11 @@ tutta la casa; il calendario va bene nella scheda *Calendario* della dashboard.
   (*Timer sound*: anche il tono sveglia di Alexa) e vale per tutti i timer di quell'Echo.
 - Se nessuno la ferma smette dopo la **durata** scelta (10 minuti di default): l'integrazione rilancia la
   suonata finché serve. Sull'Echo lascia *"Timers ring for"* ad almeno 1 minuto.
+- **Piano B sul telefono**: se all'ora della sveglia l'Echo è scollegato o non comincia a squillare entro
+  15 secondi, la sveglia suona sui *telefoni di riserva* scelti nelle opzioni (app Home Assistant): una
+  notifica critica ogni minuto con **Ferma** e **Posticipa**. Su iPhone serve permettere gli *avvisi
+  critici* all'app. Se è spento Home Assistant stesso non suona niente: per le sveglie importanti tieni
+  anche quella del telefono.
 - **Volume progressivo**: dal volume iniziale al finale nel tempo di salita, poi rimette il volume di prima.
 - Le sveglie sopravvivono ai riavvii; se HA era spento all'ora della sveglia e riparte entro 15 minuti, suona
   subito. Una sveglia singola, dopo aver suonato, resta nell'elenco spenta (come Alexa e iPhone):

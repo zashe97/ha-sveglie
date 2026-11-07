@@ -371,3 +371,64 @@ async def test_icona(hass: HomeAssistant) -> None:
     integrazione = (await async_get_custom_components(hass))[DOMAIN]
     assert integrazione.has_branding
     assert (Path(integrazione.file_path) / "brand" / "icon.png").is_file()
+
+
+async def test_piano_b_sul_telefono(hass: HomeAssistant, echo, monkeypatch) -> None:
+    """L'Echo non squilla: la sveglia suona sul telefono e Ferma/Posticipa funzionano."""
+    from custom_components.sveglie import suonata as modulo
+
+    monkeypatch.setattr(modulo, "CONTROLLO_SECONDI", 1)
+    monkeypatch.setattr(modulo, "RIPETI_AVVISO_SECONDI", 1)
+    dev, ids, eventi = echo
+    async_mock_service(hass, "button", "press")
+    avvisi = async_mock_service(hass, "notify", "mobile_app_iphone_di_riccardo")
+    await _avvia(hass, {"telefoni_riserva": ["mobile_app_iphone_di_riccardo"]})
+    gestore = hass.data[DOMAIN]
+
+    # 1) il timer parte ma "Timer ringing" resta spento: dopo il controllo avvisa, poi ripete
+    await _strumento(hass, dev.id, "sveglie__imposta", tra_minuti=5)
+    (sv,) = gestore.sveglie.values()
+    await gestore._async_suona(sv.id)
+    await asyncio.sleep(3.5)
+    assert eventi, "il timer sull'Echo va comunque tentato"
+    critici = [a for a in avvisi if a.data.get("message") != "clear_notification"]
+    assert len(critici) >= 2, avvisi
+    assert critici[0].data["data"]["push"]["sound"]["critical"] == 1
+    azioni = [a["action"] for a in critici[0].data["data"]["actions"]]
+    hass.bus.async_fire("mobile_app_notification_action", {"action": azioni[1]})  # Posticipa
+    await asyncio.sleep(0.3)
+    await hass.async_block_till_done()
+    assert [s for s in gestore.sveglie.values() if s.posticipata]
+    assert avvisi[-1].data == {"message": "clear_notification", "data": {"tag": critici[0].data["data"]["tag"]}}
+    assert dev.id not in gestore._suonate
+
+    # 2) l'Echo risulta scollegato: niente attesa, subito il telefono; Ferma chiude tutto
+    avvisi.clear()
+    hass.states.async_set(ids["assist_satellite"], "unavailable")
+    hass.states.async_set(ids["media_player"], "unavailable")
+    altra = await gestore.async_aggiungi("06:30", dev.id, giorni=[0, 1, 2, 3, 4])
+    await gestore._async_suona(altra.id)
+    await asyncio.sleep(0.3)
+    assert len(avvisi) == 1
+    task, _ = gestore._suonate[dev.id]
+    ferma = avvisi[0].data["data"]["actions"][0]["action"]
+    hass.bus.async_fire("mobile_app_notification_action", {"action": "ALTRO"})  # ignorata
+    hass.bus.async_fire("mobile_app_notification_action", {"action": ferma})
+    await asyncio.wait_for(task, 5)
+    assert avvisi[-1].data["message"] == "clear_notification"
+
+
+async def test_opzione_telefoni(hass: HomeAssistant, echo) -> None:
+    async_mock_service(hass, "notify", "mobile_app_iphone_di_riccardo")
+    async_mock_service(hass, "notify", "lg_tv")
+    entry = await _avvia(hass)
+    res = await hass.config_entries.options.async_init(entry.entry_id)
+    campo = next(k for k in res["data_schema"].schema if str(k) == "telefoni_riserva")
+    opzioni = res["data_schema"].schema[campo].config["options"]
+    assert opzioni == ["mobile_app_iphone_di_riccardo"]  # solo i telefoni con l'app
+    res = await hass.config_entries.options.async_configure(
+        res["flow_id"], {"telefoni_riserva": ["mobile_app_iphone_di_riccardo"]}
+    )
+    assert res["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    assert hass.data[DOMAIN].telefoni == ["mobile_app_iphone_di_riccardo"]
