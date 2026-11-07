@@ -36,14 +36,25 @@ jobs:
           fi
           echo "tag=v$versione" >> "$GITHUB_OUTPUT"
 
-      - name: Ferma se la versione esiste già
+      - name: Controlla se la versione esiste già
+        id: c
         run: |
-          if gh api "repos/$REPO/git/ref/tags/${{ steps.v.outputs.tag }}" >/dev/null 2>&1; then
-            echo "::error::${{ steps.v.outputs.tag }} esiste già: alza la versione in manifest.json"
+          tag="${{ steps.v.outputs.tag }}"
+          if ! gh api "repos/$REPO/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "nuova=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # stessa versione: va bene solo se l'integrazione non è cambiata (README, Action...)
+          cambiati=$(gh api "repos/$REPO/compare/$tag...$SHA" \
+            --jq '[.files[]?.filename | select(startswith("custom_components/"))] | length')
+          if [ "$cambiati" != "0" ]; then
+            echo "::error::L'integrazione è cambiata ma $tag esiste già: alza la versione in manifest.json"
             exit 1
           fi
+          echo "::notice::Nessuna modifica all'integrazione: nessuna nuova release"
+          echo "nuova=false" >> "$GITHUB_OUTPUT"
 
       - name: Note dalla PR unita
+        if: steps.c.outputs.nuova == 'true'
         run: |
           gh api "repos/$REPO/commits/$SHA/pulls" \
             --jq '[.[] | select(.merged_at != null)][0] | "\(.body // "")\n\nPR #\(.number)"' > note.md
@@ -52,6 +63,7 @@ jobs:
           fi
 
       - name: Crea la release
+        if: steps.c.outputs.nuova == 'true'
         run: |
           gh release create "${{ steps.v.outputs.tag }}" --repo "$REPO" --target "$SHA" \
             --title "${{ steps.v.outputs.tag }}" --notes-file note.md --latest
