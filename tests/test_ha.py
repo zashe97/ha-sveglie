@@ -432,3 +432,74 @@ async def test_opzione_telefoni(hass: HomeAssistant, echo) -> None:
     assert res["type"] is FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
     assert hass.data[DOMAIN].telefoni == ["mobile_app_iphone_di_riccardo"]
+
+
+async def test_entity_id_stabili(hass: HomeAssistant, echo) -> None:
+    """Gli entity_id usano un numero fisso, non l'ora; seguono il nome del dispositivo."""
+    dev, _, _ = echo
+    entry = await _avvia(hass)
+    gestore = hass.data[DOMAIN]
+    reg = er.async_get(hass)
+    prima = await gestore.async_aggiungi("07:15", dev.id, giorni=[0, 1, 2, 3, 4])
+    seconda = await gestore.async_aggiungi("08:30", dev.id, giorni=[5])
+    await hass.async_block_till_done()
+    assert (prima.numero, seconda.numero) == (1, 2)
+
+    def ids(sv):
+        return sorted(
+            e.entity_id for e in er.async_entries_for_config_entry(reg, entry.entry_id)
+            if e.unique_id.startswith(f"{sv.id}_")
+        )
+
+    attesi = [
+        "sensor.sveglie_echo_soggiorno_sveglia_1_prossima_suonata",
+        "switch.sveglie_echo_soggiorno_sveglia_1_accesa",
+        "switch.sveglie_echo_soggiorno_sveglia_1_salta_i_festivi",
+        "switch.sveglie_echo_soggiorno_sveglia_1_salta_la_prossima",
+        "switch.sveglie_echo_soggiorno_sveglia_1_volume_progressivo",
+        "time.sveglie_echo_soggiorno_sveglia_1_ora",
+    ]
+    assert ids(prima) == attesi
+    assert "switch.sveglie_echo_soggiorno_sveglia_2_accesa" in ids(seconda)
+    # il nome visibile segue ancora il titolo
+    assert "07:15" in hass.states.get("switch.sveglie_echo_soggiorno_sveglia_1_accesa").name
+
+    # cambiare l'ora non cambia gli entity_id
+    await gestore.async_modifica(prima.id, ora="13:14")
+    await hass.async_block_till_done()
+    assert ids(prima) == attesi
+    assert "13:14" in hass.states.get("switch.sveglie_echo_soggiorno_sveglia_1_accesa").name
+
+    # migrazione: entity_id vecchio (dal titolo) e nessun numero salvato
+    reg.async_update_entity(
+        "switch.sveglie_echo_soggiorno_sveglia_1_accesa",
+        new_entity_id="switch.sveglie_echo_soggiorno_07_15_dal_lunedi_al_venerdi_accesa",
+    )
+    sub = entry.subentries[prima.id]
+    dati = {k: v for k, v in sub.data.items() if k != "numero"}
+    hass.config_entries.async_update_subentry(entry, sub, data=dati)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert ids(prima) == attesi
+    assert hass.data[DOMAIN].sveglie[prima.id].numero == 1
+
+    # rinomino l'Echo: gli entity_id seguono
+    dr.async_get(hass).async_update_device(dev.id, name_by_user="Echo Camera")
+    await hass.async_block_till_done()
+    assert "switch.sveglie_echo_camera_sveglia_1_accesa" in ids(prima)
+    assert "switch.sveglie_echo_camera_sveglia_2_accesa" in ids(seconda)
+    assert hass.states.get("switch.sveglie_echo_camera_sveglia_1_accesa") is not None
+
+
+async def test_numeri_per_dispositivo() -> None:
+    from custom_components.sveglie.identificativi import assegna_numeri
+    from custom_components.sveglie.logic import Sveglia
+
+    a = Sveglia(id="01A", ora="07:00", device_id="echo", numero=1)
+    b = Sveglia(id="01B", ora="08:00", device_id="echo")
+    c = Sveglia(id="01C", ora="09:00", device_id="ball")
+    d = Sveglia(id="01D", ora="10:00", device_id="echo", numero=1)  # spostata qui: doppione
+    p = Sveglia(id="01E", ora="10:09", device_id="echo", posticipata=True)
+    cambiate = assegna_numeri([d, c, b, a, p])
+    assert (a.numero, b.numero, c.numero, d.numero, p.numero) == (1, 2, 1, 3, None)
+    assert {s.id for s in cambiate} == {"01B", "01C", "01D"}

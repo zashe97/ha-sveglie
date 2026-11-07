@@ -279,6 +279,7 @@ class Sveglia:
     durata: int | None = None  # minuti di suonata; None = quella generale
     salta: str | None = None  # "YYYY-MM-DD": data della prossima suonata da saltare
     posticipata: bool = False
+    numero: int | None = None  # per gli entity_id stabili, unico tra le sveglie del dispositivo
     prossima: str | None = None  # ISO con fuso, calcolata, non salvata nella configurazione
 
     @property

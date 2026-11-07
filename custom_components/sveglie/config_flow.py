@@ -233,6 +233,7 @@ class SvegliaSubentryFlow(ConfigSubentryFlow):
             salta_festivi=bool(dati.get(CONF_SALTA_FESTIVI)) and bool(giorni),
             durata=int(dati[CONF_DURATA_SVEGLIA]) if dati.get(CONF_DURATA_SVEGLIA) else None,
             salta=(prima or {}).get("salta"),
+            numero=(prima or {}).get("numero"),
         )
         tz = dt_util.get_default_time_zone()
         try:
