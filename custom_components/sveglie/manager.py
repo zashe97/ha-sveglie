@@ -17,6 +17,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util, ulid as ulid_util
 
 from .const import (
+    CONF_TELEFONI,
     CONF_DISPOSITIVO_PREDEFINITO,
     CONF_DURATA,
     CONF_MINUTI_POSTICIPO,
@@ -95,6 +96,7 @@ class GestoreSveglie:
         self.volume_iniziale = int(opzione(entry, CONF_VOLUME_INIZIALE, DEFAULT_VOLUME_INIZIALE))
         self.volume_finale = int(opzione(entry, CONF_VOLUME_FINALE, DEFAULT_VOLUME_FINALE))
         self.salita_secondi = int(opzione(entry, CONF_SALITA_SECONDI, DEFAULT_SALITA_SECONDI))
+        self.telefoni = [str(t) for t in entry.options.get(CONF_TELEFONI) or []]
         try:
             self.patrono = interpreta_patrono(entry.options.get(CONF_PATRONO))
         except ErroreSveglia:
@@ -481,6 +483,9 @@ class GestoreSveglie:
             self.volume_iniziale,
             self.volume_finale,
             self.salita_secondi,
+            telefoni=self.telefoni,
+            posticipa=lambda: self.async_posticipa(sv.device_id, None),
+            etichetta=sv.id,
         )
 
         async def _esegui() -> None:

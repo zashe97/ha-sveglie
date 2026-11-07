@@ -35,6 +35,7 @@ from .const import (
     CONF_RECUPERO_MINUTI,
     CONF_SALITA_SECONDI,
     CONF_SALTA_FESTIVI,
+    CONF_TELEFONI,
     CONF_VOLUME_FINALE,
     CONF_VOLUME_INIZIALE,
     DEFAULT_DURATA,
@@ -103,6 +104,11 @@ class SveglieOptionsFlow(OptionsFlow):
             if not errori:
                 return self.async_create_entry(data=user_input)
         o = {**self.config_entry.options, **(user_input or {})}
+        # i telefoni con l'app Home Assistant (notify.mobile_app_*), per il piano B
+        telefoni = sorted(
+            s for s in self.hass.services.async_services_for_domain("notify")
+            if s.startswith("mobile_app_")
+        )
         schema = vol.Schema(
             {
                 vol.Optional(
@@ -139,6 +145,13 @@ class SveglieOptionsFlow(OptionsFlow):
                     CONF_RECUPERO_MINUTI,
                     default=o.get(CONF_RECUPERO_MINUTI, DEFAULT_RECUPERO_MINUTI),
                 ): _numero(0, 120, "min"),
+                vol.Optional(
+                    CONF_TELEFONI, default=[t for t in o.get(CONF_TELEFONI, []) if t in telefoni]
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=telefoni, multiple=True, mode=selector.SelectSelectorMode.LIST
+                    )
+                ),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema, errors=errori)

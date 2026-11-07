@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 import logging
 import re
 import time
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 
-from .const import RIARMO_SECONDI
+from .const import CONTROLLO_SECONDI, PREFISSO_AZIONE, RIARMO_SECONDI, RIPETI_AVVISO_SECONDI
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,6 +66,9 @@ class Suonata:
         volume_iniziale: int,
         volume_finale: int,
         salita_secondi: int,
+        telefoni: list[str] | None = None,
+        posticipa: Callable[[], Awaitable[object]] | None = None,
+        etichetta: str = "sveglia",
     ) -> None:
         self.hass = hass
         self.device_id = device_id
@@ -75,6 +79,10 @@ class Suonata:
         self.volume_finale = volume_finale / 100 if volume_finale else None
         self.salita = max(5, salita_secondi)
         self.entita = trova_entita(hass, device_id)
+        self.telefoni = [t for t in (telefoni or []) if t.startswith("mobile_app_")]
+        self._posticipa = posticipa
+        # tag della notifica: le ripetizioni sostituiscono la precedente invece di accumularsi
+        self.etichetta = re.sub(r"[^a-z0-9_]", "_", f"sveglie_{etichetta}".lower())[:60]
         self._volume_prima: float | None = None
         self._volume_toccato = False
         self.fermata_da_noi = False
@@ -161,6 +169,75 @@ class Suonata:
             blocking=False,
         )
 
+    # ------------------------------------------------------------------ piano B
+
+    def _non_raggiungibile(self) -> bool:
+        """Il satellite risulta scollegato in HA."""
+        for entita in (self.entita.satellite, self.entita.media_player):
+            if entita and (st := self.hass.states.get(entita)) is not None:
+                return st.state == "unavailable"
+        return False
+
+    async def _notifica(self, telefono: str, dati: dict) -> None:
+        try:
+            await self.hass.services.async_call("notify", telefono, dati, blocking=True)
+        except HomeAssistantError as err:
+            _LOGGER.warning("Non sono riuscito ad avvisare %s: %s", telefono, err)
+
+    async def _piano_b(self, inizio: float) -> None:
+        """Il satellite non suona: la sveglia suona sui telefoni, con Ferma e Posticipa."""
+        if not self.telefoni:
+            await self._annuncia()
+            return
+        _LOGGER.warning(
+            "La sveglia non è partita su %s: suono sui telefoni %s", self.device_id, self.telefoni
+        )
+        ferma = f"{PREFISSO_AZIONE}FERMA_{self.etichetta}"
+        posticipa = f"{PREFISSO_AZIONE}POSTICIPA_{self.etichetta}"
+        risposta: asyncio.Future[str] = self.hass.loop.create_future()
+
+        @callback
+        def _azione(evento: Event) -> None:
+            azione = evento.data.get("action")
+            if azione in (ferma, posticipa) and not risposta.done():
+                risposta.set_result(azione)
+
+        annulla = self.hass.bus.async_listen("mobile_app_notification_action", _azione)
+        messaggio = {
+            "title": "Sveglia",
+            "message": f"{self.nome.capitalize()}: il dispositivo non risponde, suono qui.",
+            "data": {
+                "tag": self.etichetta,
+                "push": {
+                    "interruption-level": "critical",
+                    "sound": {"name": "default", "critical": 1, "volume": 1.0},
+                },
+                "actions": [
+                    {"action": ferma, "title": "Ferma"},
+                    {"action": posticipa, "title": "Posticipa"},
+                ],
+            },
+        }
+        try:
+            while time.monotonic() - inizio < self.durata:
+                for telefono in self.telefoni:
+                    await self._notifica(telefono, messaggio)
+                try:
+                    azione = await asyncio.wait_for(
+                        asyncio.shield(risposta), RIPETI_AVVISO_SECONDI
+                    )
+                except TimeoutError:
+                    continue
+                if azione == posticipa and self._posticipa is not None:
+                    self.hass.async_create_task(self._posticipa())
+                return
+        finally:
+            annulla()
+            for telefono in self.telefoni:
+                await self._notifica(
+                    telefono, {"message": "clear_notification", "data": {"tag": self.etichetta}}
+                )
+
     async def async_esegui(self) -> None:
         """Suona fino a stop, scadenza o annullamento del task."""
         self._volume_prima = self._leggi_volume()
@@ -173,11 +250,11 @@ class Suonata:
             elif self.volume_finale is not None:
                 await self._imposta_volume(finale)
 
-            if not self._avvia_suono():
-                await self._annuncia()
+            inizio = time.monotonic()
+            if self._non_raggiungibile() or not self._avvia_suono():
+                await self._piano_b(inizio)
                 return
 
-            inizio = time.monotonic()
             ultimo_riarmo = inizio
             ultimo_volume = 0.0
             visto_suonare = False
@@ -191,6 +268,10 @@ class Suonata:
                     return
                 elif stato is None and trascorsi > 60:
                     return  # il dispositivo non dice se suona: un giro solo
+                if not visto_suonare and stato is False and trascorsi >= CONTROLLO_SECONDI:
+                    # il timer è partito ma il satellite non squilla (scollegato, audio bloccato)
+                    await self._piano_b(inizio)
+                    return
                 if self.progressiva and time.monotonic() - ultimo_volume >= PASSO_VOLUME_SECONDI:
                     ultimo_volume = time.monotonic()
                     quota = min(1.0, trascorsi / self.salita)
