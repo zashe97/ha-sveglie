@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 import probatio
@@ -20,6 +20,7 @@ from homeassistant.helpers.llm import (
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .dispositivi import nome_dispositivo
 from .logic import (
     GIORNI,
     MESI,
@@ -35,7 +36,8 @@ from .logic import (
 from .manager import GestoreSveglie
 
 PROMPT = (
-    "Sveglie: per impostare, elencare, cancellare o posticipare le sveglie usa SEMPRE gli strumenti "
+    "Sveglie: per impostare, elencare, cancellare, modificare (spegnere, saltare la prossima, spostare) o "
+    "posticipare le sveglie usa SEMPRE gli strumenti "
     "sveglie__* (non i timer). Passa l'ora come la dice l'utente in formato 24 ore (\"le 8 di sera\" = 20:00, "
     "\"le 7\" di mattina = 07:00) e il giorno a parole (\"domani\", \"sabato\") senza calcolare tu le date. "
     "Se l'utente non dice il giorno non passarlo: lo strumento sceglie da solo la prossima volta che arriva "
@@ -44,12 +46,64 @@ PROMPT = (
 )
 
 
+def frase_impostata(sv, adesso: datetime) -> str:
+    """Conferma parlata di una sveglia appena impostata."""
+    if sv.ripetuta:
+        hh, mm = int(sv.ora[:2]), sv.ora[3:]
+        alle = "all'" if hh == 1 else "alle "
+        return f"Ok, sveglia impostata {descrivi_giorni(sv.giorni)} {alle}{hh}:{mm}."
+    return f"Ok, sveglia impostata per {descrivi_quando(datetime.fromisoformat(sv.prossima), adesso)}."
+
+
 def _gestore(hass: HomeAssistant) -> GestoreSveglie | None:
     return hass.data.get(DOMAIN)
 
 
 def _errore(testo: str) -> ToolResult:
     return ToolResult(data={"error": testo, "frase": testo}, error=True)
+
+
+SCHEMA_RICERCA = {
+    probatio.Optional("ora", description="Ora della sveglia, HH:MM."): str,
+    probatio.Optional(
+        "ripeti", description="Giorni della sveglia ripetuta, se l'utente li dice."
+    ): str,
+    probatio.Optional("giorno", description="Giorno della sveglia singola, se l'utente lo dice."): str,
+    probatio.Optional("nome", description="Nome della sveglia."): str,
+}
+
+
+def _trova(gestore: GestoreSveglie, args: dict[str, Any], adesso: datetime, verbo: str):
+    """La sveglia indicata dall'utente, o un ToolResult di errore/ambiguità."""
+    candidate = gestore.elenco()
+    try:
+        if args.get("ora"):
+            ora = interpreta_ora(args["ora"])
+            testo = f"{ora.hour:02d}:{ora.minute:02d}"
+            candidate = [s for s in candidate if s.ora == testo]
+        if args.get("ripeti"):
+            giorni = interpreta_giorni(args["ripeti"])
+            candidate = [s for s in candidate if s.giorni == giorni]
+        if args.get("giorno"):
+            g = interpreta_quando(args["giorno"], adesso.date())
+            data = g.isoformat() if g else ""
+            candidate = [
+                s for s in candidate if (s.prossima and s.prossima[:10] == data) or s.data == data
+            ]
+    except ErroreSveglia as err:
+        return _errore(str(err))
+    if args.get("nome"):
+        nome = str(args["nome"]).lower()
+        candidate = [s for s in candidate if s.nome and nome in s.nome.lower()]
+    if not candidate:
+        return _errore("Non ho trovato nessuna sveglia così.")
+    if len(candidate) > 1:
+        descr = "; ".join(descrivi(s, adesso, gestore.tz) for s in candidate)
+        return ToolResult(
+            data={"error": "ambigua", "frase": f"Ne ho trovate {len(candidate)}: {descr}. Quale {verbo}?"},
+            error=True,
+        )
+    return candidate[0]
 
 
 class ImpostaSveglia(Tool):
@@ -87,6 +141,14 @@ class ImpostaSveglia(Tool):
                 "tra_minuti", description="Per 'svegliami tra N minuti': il numero di minuti."
             ): int,
             probatio.Optional("nome", description="Nome della sveglia, solo se l'utente lo dice."): str,
+            probatio.Optional(
+                "progressiva",
+                description="true/false solo se l'utente chiede il volume che sale piano (o di non usarlo).",
+            ): bool,
+            probatio.Optional(
+                "salta_festivi",
+                description="true per una sveglia ripetuta che non deve suonare nei giorni festivi.",
+            ): bool,
         }
     )
 
@@ -101,15 +163,8 @@ class ImpostaSveglia(Tool):
         tz = gestore.tz
         try:
             if args.get("tra_minuti"):
-                minuti = int(args["tra_minuti"])
-                if minuti <= 0 or minuti > 24 * 60:
-                    raise ErroreSveglia("Posso impostarla tra 1 minuto e 24 ore da adesso.")
-                quando = (adesso + timedelta(minutes=minuti)).replace(second=0, microsecond=0)
-                sv = await gestore.async_aggiungi(
-                    ora=f"{quando.hour:02d}:{quando.minute:02d}",
-                    device_id=llm_context.device_id,
-                    quando=quando,
-                    nome=args.get("nome"),
+                sv = await gestore.async_aggiungi_tra(
+                    int(args["tra_minuti"]), llm_context.device_id, args.get("nome")
                 )
             else:
                 if not args.get("ora"):
@@ -123,15 +178,12 @@ class ImpostaSveglia(Tool):
                     quando=quando,
                     giorni=giorni,
                     nome=args.get("nome"),
+                    progressiva=args.get("progressiva"),
+                    salta_festivi=bool(args.get("salta_festivi")),
                 )
         except ErroreSveglia as err:
             return _errore(str(err))
-        if sv.ripetuta:
-            hh, mm = int(sv.ora[:2]), sv.ora[3:]
-            alle = "all'" if hh == 1 else "alle "
-            frase = f"Ok, sveglia impostata {descrivi_giorni(sv.giorni)} {alle}{hh}:{mm}."
-        else:
-            frase = f"Ok, sveglia impostata per {descrivi_quando(datetime.fromisoformat(sv.prossima), adesso)}."
+        frase = frase_impostata(sv, adesso)
         return ToolResult(data={"success": True, "frase": frase, "sveglia": sv.to_dict()})
 
 
@@ -156,6 +208,13 @@ class ElencaSveglie(Tool):
         if not elenco:
             return ToolResult(data={"sveglie": [], "frase": "Non hai sveglie impostate."})
         descrizioni = [descrivi(s, adesso, gestore.tz) for s in elenco]
+        # con più satelliti si dice dove suona ognuna (come chiedere ad Alexa da un'altra stanza)
+        dove = {s.device_id for s in elenco}
+        if len(dove) > 1 or dove != {llm_context.device_id}:
+            descrizioni = [
+                f"{d} su {nome}" if (nome := nome_dispositivo(hass, s.device_id)) else d
+                for s, d in zip(elenco, descrizioni)
+            ]
         if len(descrizioni) == 1:
             frase = f"Hai una {descrizioni[0]}."
         else:
@@ -182,12 +241,7 @@ class CancellaSveglia(Tool):
     integration = DOMAIN
     parameters = probatio.Schema(
         {
-            probatio.Optional("ora", description="Ora della sveglia da cancellare, HH:MM."): str,
-            probatio.Optional(
-                "ripeti", description="Giorni della sveglia ripetuta da cancellare, se l'utente li dice."
-            ): str,
-            probatio.Optional("giorno", description="Giorno della sveglia singola, se l'utente lo dice."): str,
-            probatio.Optional("nome", description="Nome della sveglia."): str,
+            **SCHEMA_RICERCA,
             probatio.Optional("tutte", description="true per cancellare tutte le sveglie."): bool,
         }
     )
@@ -208,40 +262,80 @@ class CancellaSveglia(Tool):
                 "Ho cancellato la sveglia." if n == 1 else f"Ho cancellato tutte le {n} sveglie."
             )
             return ToolResult(data={"success": True, "frase": frase})
-        try:
-            if args.get("ora"):
-                ora = interpreta_ora(args["ora"])
-                testo = f"{ora.hour:02d}:{ora.minute:02d}"
-                candidate = [s for s in candidate if s.ora == testo]
-            if args.get("ripeti"):
-                giorni = interpreta_giorni(args["ripeti"])
-                candidate = [s for s in candidate if s.giorni == giorni]
-            if args.get("giorno"):
-                g = interpreta_quando(args["giorno"], adesso.date())
-                candidate = [
-                    s for s in candidate if s.prossima and s.prossima[:10] == (g.isoformat() if g else "")
-                ]
-        except ErroreSveglia as err:
-            return _errore(str(err))
-        if args.get("nome"):
-            nome = str(args["nome"]).lower()
-            candidate = [s for s in candidate if s.nome and nome in s.nome.lower()]
-        if not candidate:
-            return _errore("Non ho trovato nessuna sveglia così.")
-        if len(candidate) > 1:
-            descr = "; ".join(descrivi(s, adesso, gestore.tz) for s in candidate)
-            return ToolResult(
-                data={
-                    "error": "ambigua",
-                    "frase": f"Ne ho trovate {len(candidate)}: {descr}. Quale cancello?",
-                },
-                error=True,
-            )
-        sv = candidate[0]
+        trovata = _trova(gestore, args, adesso, "cancello")
+        if isinstance(trovata, ToolResult):
+            return trovata
+        sv = trovata
         await gestore.async_elimina([sv.id])
         return ToolResult(
             data={"success": True, "frase": f"Ho cancellato la {descrivi(sv, adesso, gestore.tz)}."}
         )
+
+
+class ModificaSveglia(Tool):
+    """Spegne, riaccende, salta la prossima o sposta una sveglia."""
+
+    name = f"{DOMAIN}__modifica"
+    title = "Modifica sveglia"
+    description = (
+        "Cambia una sveglia esistente senza cancellarla: spegnerla o riaccenderla ('disattiva la sveglia "
+        "delle 7'), saltare solo la prossima volta ('domani non svegliarmi', 'salta la sveglia di "
+        "lunedì'), spostarla a un'altra ora ('sposta la sveglia delle 7 alle 7:30'), attivare o togliere "
+        "il volume progressivo o il salto dei festivi. Indica la sveglia con ora/giorni/nome come per "
+        "cancellarla."
+    )
+    annotations = ToolAnnotations(destructive=False, open_world=False)
+    integration = DOMAIN
+    parameters = probatio.Schema(
+        {
+            **SCHEMA_RICERCA,
+            probatio.Optional("attiva", description="false per spegnerla, true per riaccenderla."): bool,
+            probatio.Optional(
+                "salta_prossima", description="true per saltare solo la prossima volta, false per annullare."
+            ): bool,
+            probatio.Optional("nuova_ora", description="Nuova ora HH:MM, se l'utente la sposta."): str,
+            probatio.Optional("progressiva", description="Volume che sale piano: true o false."): bool,
+            probatio.Optional("salta_festivi", description="Non suonare nei festivi: true o false."): bool,
+        }
+    )
+
+    async def async_call(
+        self, hass: HomeAssistant, tool_input: ToolInput, llm_context: LLMContext
+    ) -> ToolResult:
+        gestore = _gestore(hass)
+        if gestore is None:
+            return _errore("Le sveglie non sono attive.")
+        args = tool_input.tool_args
+        adesso = dt_util.now()
+        trovata = _trova(gestore, args, adesso, "modifico")
+        if isinstance(trovata, ToolResult):
+            return trovata
+        campi: dict[str, Any] = {}
+        for chiave in ("attiva", "salta_prossima", "progressiva", "salta_festivi"):
+            if args.get(chiave) is not None:
+                campi[chiave] = bool(args[chiave])
+        try:
+            if args.get("nuova_ora"):
+                ora = interpreta_ora(args["nuova_ora"])
+                campi["ora"] = f"{ora.hour:02d}:{ora.minute:02d}"
+            if not campi:
+                raise ErroreSveglia("Cosa devo cambiare in quella sveglia?")
+            sv = await gestore.async_modifica(trovata.id, **campi)
+        except ErroreSveglia as err:
+            return _errore(str(err))
+        descr = descrivi(sv, adesso, gestore.tz)
+        if campi.get("attiva") is False:
+            frase = f"Ok, ho spento la {descr.replace(' (spenta)', '')}."
+        elif campi.get("salta_prossima"):
+            frase = f"Ok, salto la prossima: la {descr.replace(' (salta la prossima)', '')} suonerà di nuovo dopo."
+            if sv.prossima:
+                frase = (
+                    "Ok, salto la prossima volta. Suonerà di nuovo "
+                    f"{descrivi_quando(datetime.fromisoformat(sv.prossima), adesso)}."
+                )
+        else:
+            frase = f"Ok, ora è così: {descr}."
+        return ToolResult(data={"success": True, "frase": frase})
 
 
 class PosticipaSveglia(Tool):
@@ -293,6 +387,6 @@ def async_get_tools(hass: HomeAssistant, llm_context: LLMContext, api_id: str) -
     if api_id != LLM_API_ASSIST or _gestore(hass) is None:
         return None
     return LLMTools(
-        tools=[ImpostaSveglia(), ElencaSveglie(), CancellaSveglia(), PosticipaSveglia()],
+        tools=[ImpostaSveglia(), ElencaSveglie(), CancellaSveglia(), ModificaSveglia(), PosticipaSveglia()],
         prompt=PROMPT.format(adesso=_adesso_testo()),
     )

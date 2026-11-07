@@ -5,33 +5,24 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 
-from .const import (
-    CONF_DISPOSITIVO_PREDEFINITO,
-    CONF_MINUTI_POSTICIPO,
-    CONF_RECUPERO_MINUTI,
-    DEFAULT_MINUTI_POSTICIPO,
-    DEFAULT_RECUPERO_MINUTI,
-    DOMAIN,
-)
+from .const import DOMAIN
+from .dispositivi import dispositivo_del_gruppo
+from .frasi import async_registra_frasi
 from .manager import GestoreSveglie
 
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.CALENDAR, Platform.SENSOR, Platform.SWITCH, Platform.TIME]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Avvia il gestore delle sveglie."""
-    opzioni = entry.options
-    gestore = GestoreSveglie(
-        hass,
-        dispositivo_predefinito=opzioni.get(CONF_DISPOSITIVO_PREDEFINITO) or None,
-        minuti_posticipo=int(opzioni.get(CONF_MINUTI_POSTICIPO, DEFAULT_MINUTI_POSTICIPO)),
-        recupero_minuti=int(opzioni.get(CONF_RECUPERO_MINUTI, DEFAULT_RECUPERO_MINUTI)),
-    )
-    await gestore.async_carica()
+    gestore = GestoreSveglie(hass, entry)
     hass.data[DOMAIN] = gestore
+    await gestore.async_carica()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    entry.async_on_unload(entry.add_update_listener(_async_opzioni_cambiate))
+    entry.async_on_unload(async_registra_frasi(hass))
+    entry.async_on_unload(entry.add_update_listener(_async_aggiornata))
     return True
 
 
@@ -43,5 +34,21 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return ok
 
 
-async def _async_opzioni_cambiate(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    await hass.config_entries.async_reload(entry.entry_id)
+async def _async_aggiornata(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Opzioni cambiate: si riparte. Sveglie aggiunte o modificate: si riallinea e basta."""
+    gestore: GestoreSveglie | None = hass.data.get(DOMAIN)
+    if gestore is None or dict(entry.options) != gestore.opzioni:
+        await hass.config_entries.async_reload(entry.entry_id)
+        return
+    gestore.sincronizza()
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: ConfigEntry, device: dr.DeviceEntry
+) -> bool:
+    """Si può togliere un gruppo "Sveglie <satellite>" solo se non ha sveglie."""
+    satellite = dispositivo_del_gruppo(device)
+    if satellite is None:
+        return False
+    gestore: GestoreSveglie | None = hass.data.get(DOMAIN)
+    return not (gestore and any(s.device_id == satellite for s in gestore.sveglie.values()))
