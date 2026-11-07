@@ -6,10 +6,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
+from homeassistant.loader import async_get_integration
 
 from .const import DOMAIN
 from .dispositivi import dispositivo_del_gruppo
 from .frasi import async_registra_frasi
+from .scheda import async_registra_scheda
 from .manager import GestoreSveglie
 
 PLATFORMS = [Platform.CALENDAR, Platform.SENSOR, Platform.SWITCH, Platform.TIME]
@@ -22,6 +24,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await gestore.async_carica()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(async_registra_frasi(hass))
+    integrazione = await async_get_integration(hass, DOMAIN)
+    await async_registra_scheda(hass, str(integrazione.version))
     entry.async_on_unload(entry.add_update_listener(_async_aggiornata))
     return True
 
