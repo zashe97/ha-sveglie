@@ -20,6 +20,7 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN, SEGNALE_AGGIORNATE, SEGNALE_NUOVE
 from .dispositivi import assicura_gruppo
+from .identificativi import id_atteso
 from .logic import ErroreSveglia, Sveglia
 from .manager import GestoreSveglie
 
@@ -65,6 +66,18 @@ class EntitaSveglia(Entity):
         self._attr_translation_placeholders = {"sveglia": _etichetta(gestore, sid)}
         # il dispositivo "Sveglie <satellite>" esiste già (lo crea il gestore): ci si aggancia
         self.device_entry = assicura_gruppo(gestore.hass, gestore.entry, sv.device_id if sv else None)
+        # entity_id stabile (non dal titolo, che cambia con l'ora): vedi identificativi.py
+        if sv and (atteso := id_atteso(gestore.hass, gestore.entry, sv, type(self).__module__.rpartition(".")[2], chiave)):
+            self.entity_id = atteso
+
+    @property
+    def name(self):  # type: ignore[override]
+        """Il nome segue il titolo della sveglia (HA terrebbe in cache il primo)."""
+        if not self.platform_data:
+            return self._name_internal(None, {})
+        return self._name_internal(
+            self._device_class_name, self.platform_data.platform_translations
+        )
 
     @property
     def sveglia(self) -> Sveglia | None:
