@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 from pytest_homeassistant_custom_component.common import (
@@ -346,3 +347,11 @@ async def test_gruppi_per_dispositivo(hass: HomeAssistant, echo, caplog) -> None
     assert hass.states.get(sensore).attributes["numero"] == 0
     # nessun avviso di HA su dispositivi o sottovoci usati male
     assert "subentry" not in caplog.text and "deprecated" not in caplog.text, caplog.text
+
+
+async def test_icona(hass: HomeAssistant) -> None:
+    from homeassistant.loader import async_get_custom_components  # noqa: PLC0415
+
+    integrazione = (await async_get_custom_components(hass))[DOMAIN]
+    assert integrazione.has_branding
+    assert (Path(integrazione.file_path) / "brand" / "icon.png").is_file()
