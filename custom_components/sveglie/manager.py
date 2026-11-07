@@ -14,13 +14,16 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util, ulid as ulid_util
 
 from .const import (
+    MAX_LUNGHEZZA_NOME,
+    MAX_MINUTI_POSTICIPO,
+    MAX_SVEGLIE,
     DEFAULT_MINUTI_POSTICIPO,
     DEFAULT_RECUPERO_MINUTI,
     SEGNALE_AGGIORNATE,
     STORAGE_KEY,
     STORAGE_VERSION,
 )
-from .logic import ErroreSveglia, Sveglia, prossima_suonata
+from .logic import ErroreSveglia, Sveglia, prossima_suonata, pulisci_nome
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -110,7 +113,7 @@ class GestoreSveglie:
             device_id=device_id,
             giorni=sorted(set(giorni or [])),
             data=quando.date().isoformat() if (quando and not giorni) else None,
-            nome=(nome or None),
+            nome=pulisci_nome(nome, MAX_LUNGHEZZA_NOME),
             posticipata=posticipata,
         )
         if sv.ripetuta:
@@ -129,6 +132,8 @@ class GestoreSveglie:
                 and not altra.posticipata
             ):
                 return altra
+        if len(self.sveglie) >= MAX_SVEGLIE:
+            raise ErroreSveglia(f"Hai già {MAX_SVEGLIE} sveglie: cancellane qualcuna prima.")
         self.sveglie[sv.id] = sv
         self._programma(sv)
         await self._async_salva()
@@ -154,6 +159,8 @@ class GestoreSveglie:
         if base is None:
             raise ErroreSveglia("Non c'è nessuna sveglia da posticipare.")
         minuti = minuti or self.minuti_posticipo
+        if not 1 <= minuti <= MAX_MINUTI_POSTICIPO:
+            raise ErroreSveglia(f"Posso posticipare da 1 a {MAX_MINUTI_POSTICIPO} minuti.")
         await self.async_ferma_suono(device_id)
         quando = dt_util.now().replace(second=0, microsecond=0) + timedelta(minutes=minuti)
         return await self.async_aggiungi(
