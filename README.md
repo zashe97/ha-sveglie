@@ -12,7 +12,7 @@ helper o automazioni.
   scambierebbero per un comando ritardato).
 - Ripetute: *"nei giorni feriali alle 7"*, *"nel weekend alle 9"*, *"ogni lunedì e giovedì alle 8"*,
   *"…tranne i festivi"*.
-- *"Che sveglie ho?"*, *"cancella la sveglia delle 7"*, *"cancella tutte le sveglie"*.
+- *"Che sveglie ho?"* (tutte, e con più satelliti dice dove suona ognuna), *"cancella la sveglia delle 7"*, *"cancella tutte le sveglie"*.
 - *"Disattiva la sveglia delle 7"* / *"riattivala"*, *"domani non svegliarmi"* (salta solo la prossima),
   *"sposta la sveglia delle 7 alle 7:30"*, *"metti il volume progressivo alla sveglia delle 7"*.
 - *"Posticipa"* / *"ancora 5 minuti"* (predefinito 9 minuti), *"Alexa, stop"*.
@@ -21,18 +21,26 @@ helper o automazioni.
 
 Impostazioni → Dispositivi e servizi → **Sveglie** → **Aggiungi sveglia**: ora, giorni (nessuno = una volta
 sola), data, nome, dispositivo, volume progressivo, salta i festivi, durata. Ogni sveglia si modifica dallo
-stesso posto (⋮ → Modifica) ed è un dispositivo con le sue entità, da mettere in dashboard:
+stesso posto (⋮ → Modifica).
+
+Per ogni satellite vocale (Echo con hassmic, Voice PE, ESPHome) c'è un dispositivo **Sveglie <nome>** con
+dentro tutte e sole le sue sveglie, anche quando non ne ha. Ogni sveglia ha:
 
 | Entità | |
 | --- | --- |
-| Accesa | spegnere senza cancellare |
-| Ora | cambiare l'ora |
-| Salta la prossima | salta una volta (si spegne da sola dopo) |
-| Volume progressivo | parte basso e sale |
-| Salta i festivi | feste nazionali italiane e patrono |
-| Prossima suonata | quando suonerà |
+| *07:00 …* accesa | spegnere senza cancellare |
+| *07:00 …* ora | cambiare l'ora |
+| *07:00 …* salta la prossima | salta una volta (si spegne da sola dopo) |
+| *07:00 …* volume progressivo | parte basso e sale |
+| *07:00 …* salta i festivi | feste nazionali italiane e patrono |
+| *07:00 …* prossima suonata | quando suonerà |
 
-Più il sensore **Prossima sveglia** con l'elenco completo negli attributi.
+Se sposti una sveglia su un altro satellite, le sue entità passano da sole nel gruppo giusto.
+
+Sulla **pagina del satellite stesso** (per esempio l'Echo) compaiono solo due entità di sola lettura:
+**Prossima sveglia** (con l'elenco negli attributi) e il calendario **Sveglie**, con tutte le suonate
+previste (spente e festivi saltati non compaiono). Nel dispositivo **Sveglie** ci sono le stesse due viste per
+tutta la casa; il calendario va bene nella scheda *Calendario* della dashboard.
 
 ## Come suona
 
