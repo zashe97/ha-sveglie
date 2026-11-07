@@ -139,6 +139,20 @@ class GestoreSveglie:
         await self._async_salva()
         return sv
 
+    async def async_aggiungi_tra(
+        self, minuti: int, device_id: str | None, nome: str | None = None
+    ) -> Sveglia:
+        """Sveglia singola tra N minuti ("svegliami tra 20 minuti")."""
+        if minuti <= 0 or minuti > 24 * 60:
+            raise ErroreSveglia("Posso impostarla tra 1 minuto e 24 ore da adesso.")
+        quando = (dt_util.now() + timedelta(minutes=minuti)).replace(second=0, microsecond=0)
+        return await self.async_aggiungi(
+            ora=f"{quando.hour:02d}:{quando.minute:02d}",
+            device_id=device_id,
+            quando=quando,
+            nome=nome,
+        )
+
     async def async_elimina(self, ids: list[str]) -> list[Sveglia]:
         tolte = []
         for sid in ids:

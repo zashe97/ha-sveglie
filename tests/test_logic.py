@@ -60,3 +60,24 @@ def test_nome_pulito():
     assert len(pulisci_nome("x" * 500)) == 30
     assert pulisci_nome("  ;;  ") is None
     assert pulisci_nome(None) is None
+
+def test_durata():
+    from logic import interpreta_durata
+    assert interpreta_durata("due minuti") == 2
+    assert interpreta_durata("2 minuti") == 2
+    assert interpreta_durata("un minuto") == 1
+    assert interpreta_durata("venticinque minuti") == 25
+    assert interpreta_durata("ventuno minuti") == 21
+    assert interpreta_durata("quarantacinque minuti") == 45
+    assert interpreta_durata("mezz'ora") == 30
+    assert interpreta_durata("un quarto d'ora") == 15
+    assert interpreta_durata("un'ora") == 60
+    assert interpreta_durata("un'ora e mezza") == 90
+    assert interpreta_durata("2 ore e 10 minuti") == 130
+    assert interpreta_durata("dieci minuti per favore") == 10
+    assert interpreta_durata("10") == 10
+    try:
+        interpreta_durata("un po'")
+        raise AssertionError
+    except Exception as err:
+        assert type(err).__name__ == "ErroreSveglia"

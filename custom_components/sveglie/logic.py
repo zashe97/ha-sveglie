@@ -158,6 +158,67 @@ def interpreta_quando(testo: str | None, oggi: date) -> date | None:
     raise ErroreSveglia(f"Non ho capito il giorno «{testo}».")
 
 
+_UNITA = {
+    "zero": 0, "un": 1, "uno": 1, "una": 1, "due": 2, "tre": 3, "quattro": 4, "cinque": 5,
+    "sei": 6, "sette": 7, "otto": 8, "nove": 9, "dieci": 10, "undici": 11, "dodici": 12,
+    "tredici": 13, "quattordici": 14, "quindici": 15, "sedici": 16, "diciassette": 17,
+    "diciotto": 18, "diciannove": 19,
+}
+_DECINE = {
+    "venti": 20, "trenta": 30, "quaranta": 40, "cinquanta": 50,
+    "sessanta": 60, "settanta": 70, "ottanta": 80, "novanta": 90,
+}
+
+
+def numero_parole(testo: str) -> int:
+    """'2', 'due', 'venticinque', 'ventuno', 'cento' -> intero."""
+    t = _norm(testo).replace(" ", "")
+    if t.isdigit():
+        return int(t)
+    if t in _UNITA:
+        return _UNITA[t]
+    if t == "cento":
+        return 100
+    for parola, valore in _DECINE.items():
+        for prefisso in (parola, parola[:-1]):  # "vent" + "uno", "trent" + "otto"
+            if t.startswith(prefisso):
+                resto = t[len(prefisso):]
+                if resto == "" and prefisso == parola:
+                    return valore
+                if resto in _UNITA and _UNITA[resto] < 10 and resto not in ("zero", "una"):
+                    return valore + _UNITA[resto]
+    raise ErroreSveglia(f"Non ho capito il numero «{testo}».")
+
+
+def interpreta_durata(testo: str) -> int:
+    """'due minuti', '10', "un'ora e mezza", "mezz'ora", '1 ora e 5 minuti' -> minuti."""
+    t = _norm(str(testo).replace("'", " ").replace("\u2019", " "))
+    t = re.sub(r"\s+(per favore|grazie|prego)$", "", t).strip()
+    speciali = {
+        "mezz ora": 30, "mezzora": 30, "un quarto d ora": 15, "quarto d ora": 15,
+        "tre quarti d ora": 45, "un ora": 60, "ora": 60,
+    }
+    if t in speciali:
+        return speciali[t]
+    m = re.fullmatch(
+        r"(?:(?P<h>\S+) or[ae])?\s*(?:e\s+)?"
+        r"(?:(?P<frac>mezza|mezzo|un quarto)|(?P<m>\S+)(?:\s+(?:minuti|minuto|min))?)?",
+        t,
+    )
+    if not m or not (m.group("h") or m.group("frac") or m.group("m")):
+        raise ErroreSveglia(f"Non ho capito tra quanto: «{testo}».")
+    totale = 0
+    if m.group("h"):
+        totale += 60 * numero_parole(m.group("h"))
+    if m.group("frac"):
+        if not m.group("h"):
+            raise ErroreSveglia(f"Non ho capito tra quanto: «{testo}».")
+        totale += 30 if m.group("frac").startswith("mezz") else 15
+    elif m.group("m"):
+        totale += numero_parole(m.group("m"))
+    return totale
+
+
 @dataclass
 class Sveglia:
     """Una sveglia salvata."""

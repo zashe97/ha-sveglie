@@ -14,6 +14,7 @@ from .const import (
     DEFAULT_RECUPERO_MINUTI,
     DOMAIN,
 )
+from .frasi import async_registra_frasi
 from .manager import GestoreSveglie
 
 PLATFORMS = [Platform.SENSOR]
@@ -31,6 +32,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await gestore.async_carica()
     hass.data[DOMAIN] = gestore
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(async_registra_frasi(hass))
     entry.async_on_unload(entry.add_update_listener(_async_opzioni_cambiate))
     return True
 
