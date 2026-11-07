@@ -1,0 +1,57 @@
+# Crea la release vX.Y.Z quando una PR viene unita su main.
+# Main si aggiorna solo con una PR unita dal proprietario (regola del repository),
+# quindi questa Action parte solo per una sua azione. Niente Action di terzi: solo `gh`.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # serve solo per creare tag e release
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+    steps:
+      - name: Versione da manifest.json
+        id: v
+        run: |
+          versione=$(gh api "repos/$REPO/contents/custom_components/sveglie/manifest.json?ref=$SHA" \
+            --jq '.content' | base64 -d | jq -r '.version')
+          if ! [[ "$versione" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Versione non valida in manifest.json: '$versione'"; exit 1
+          fi
+          echo "tag=v$versione" >> "$GITHUB_OUTPUT"
+
+      - name: Ferma se la versione esiste già
+        run: |
+          if gh api "repos/$REPO/git/ref/tags/${{ steps.v.outputs.tag }}" >/dev/null 2>&1; then
+            echo "::error::${{ steps.v.outputs.tag }} esiste già: alza la versione in manifest.json"
+            exit 1
+          fi
+
+      - name: Note dalla PR unita
+        run: |
+          gh api "repos/$REPO/commits/$SHA/pulls" \
+            --jq '[.[] | select(.merged_at != null)][0] | "\(.body // "")\n\nPR #\(.number)"' > note.md
+          if [ ! -s note.md ] || [ "$(head -c 4 note.md)" = "null" ]; then
+            echo "Release ${{ steps.v.outputs.tag }}" > note.md
+          fi
+
+      - name: Crea la release
+        run: |
+          gh release create "${{ steps.v.outputs.tag }}" --repo "$REPO" --target "$SHA" \
+            --title "${{ steps.v.outputs.tag }}" --notes-file note.md --latest
