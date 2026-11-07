@@ -7,7 +7,7 @@ Pensata per un agente vocale LLM (OpenAI, Gemini, Local OpenAI LLM…) con l'API
 
 - *"Sveglia alle 8"*: se le 8 di oggi sono passate la mette a domani, come Alexa.
 - *"Svegliami domani alle 6:30"*, *"sabato alle 9"*, *"il 12 novembre alle 7"*.
-- *"Svegliami tra 20 minuti"*.
+- *"Svegliami tra 20 minuti"*, *"sveglia tra mezz'ora"*: riconosciuta in locale, senza LLM (le frasi di HA la scambierebbero per un comando ritardato).
 - Ripetute: *"nei giorni feriali alle 7"*, *"nel weekend alle 9"*, *"ogni lunedì e giovedì alle 8"*.
 - *"Che sveglie ho?"*, *"cancella la sveglia delle 7"*, *"cancella tutte le sveglie"*.
 - *"Posticipa"* / *"ancora 5 minuti"* (predefinito 9 minuti).

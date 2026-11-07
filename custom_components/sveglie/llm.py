@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 import probatio
@@ -42,6 +42,15 @@ PROMPT = (
     "quell'ora. Dopo la chiamata ripeti all'utente la frase del campo 'frase' del risultato. "
     "Se il risultato è un errore, dillo e non confermare. Adesso è {adesso}."
 )
+
+
+def frase_impostata(sv, adesso: datetime) -> str:
+    """Conferma parlata di una sveglia appena impostata."""
+    if sv.ripetuta:
+        hh, mm = int(sv.ora[:2]), sv.ora[3:]
+        alle = "all'" if hh == 1 else "alle "
+        return f"Ok, sveglia impostata {descrivi_giorni(sv.giorni)} {alle}{hh}:{mm}."
+    return f"Ok, sveglia impostata per {descrivi_quando(datetime.fromisoformat(sv.prossima), adesso)}."
 
 
 def _gestore(hass: HomeAssistant) -> GestoreSveglie | None:
@@ -101,15 +110,8 @@ class ImpostaSveglia(Tool):
         tz = gestore.tz
         try:
             if args.get("tra_minuti"):
-                minuti = int(args["tra_minuti"])
-                if minuti <= 0 or minuti > 24 * 60:
-                    raise ErroreSveglia("Posso impostarla tra 1 minuto e 24 ore da adesso.")
-                quando = (adesso + timedelta(minutes=minuti)).replace(second=0, microsecond=0)
-                sv = await gestore.async_aggiungi(
-                    ora=f"{quando.hour:02d}:{quando.minute:02d}",
-                    device_id=llm_context.device_id,
-                    quando=quando,
-                    nome=args.get("nome"),
+                sv = await gestore.async_aggiungi_tra(
+                    int(args["tra_minuti"]), llm_context.device_id, args.get("nome")
                 )
             else:
                 if not args.get("ora"):
@@ -126,12 +128,7 @@ class ImpostaSveglia(Tool):
                 )
         except ErroreSveglia as err:
             return _errore(str(err))
-        if sv.ripetuta:
-            hh, mm = int(sv.ora[:2]), sv.ora[3:]
-            alle = "all'" if hh == 1 else "alle "
-            frase = f"Ok, sveglia impostata {descrivi_giorni(sv.giorni)} {alle}{hh}:{mm}."
-        else:
-            frase = f"Ok, sveglia impostata per {descrivi_quando(datetime.fromisoformat(sv.prossima), adesso)}."
+        frase = frase_impostata(sv, adesso)
         return ToolResult(data={"success": True, "frase": frase, "sveglia": sv.to_dict()})
 
 
